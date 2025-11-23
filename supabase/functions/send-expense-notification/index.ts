@@ -177,6 +177,61 @@ Deno.serve(async (req) => {
       });
 
       console.log(`Sent approval notification to ${accountant?.email}`);
+    } else if (action === 'rejected') {
+      // Send email to accountant who submitted
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h1 style="color: #dc2626; font-size: 24px; text-align: center;">✕ Expense Rejected</h1>
+          <p>Hi ${accountant?.full_name || 'User'},</p>
+          <p>Your expense submission has been reviewed and rejected by ${treasurer?.full_name || 'Treasurer'}.</p>
+          
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 24px; margin: 24px 0;">
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Budget Item:</p>
+            <p style="color: #111827; font-size: 16px;">${budgetMaster?.item_name || 'N/A'}</p>
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Category:</p>
+            <p style="color: #111827; font-size: 16px;">${budgetMaster?.category || 'N/A'}</p>
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Amount:</p>
+            <p style="color: #dc2626; font-size: 20px; font-weight: bold;">₹${Number(expense.amount).toLocaleString('en-IN')}</p>
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Description:</p>
+            <p style="color: #111827; font-size: 16px;">${expense.description}</p>
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Expense Date:</p>
+            <p style="color: #111827; font-size: 16px;">${new Date(expense.expense_date).toLocaleDateString('en-IN')}</p>
+            
+            <hr style="border: none; border-top: 1px solid #fecaca; margin: 20px 0;" />
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Rejected By:</p>
+            <p style="color: #111827; font-size: 16px;">${treasurer?.full_name || 'Treasurer'}</p>
+            
+            <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Rejected On:</p>
+            <p style="color: #111827; font-size: 16px;">${new Date(expense.updated_at).toLocaleDateString('en-IN')} at ${new Date(expense.updated_at).toLocaleTimeString('en-IN')}</p>
+          </div>
+
+          <p style="color: #111827; font-size: 14px; margin: 24px 0;">
+            Please review the details and resubmit if necessary with any required corrections.
+          </p>
+
+          <a href="${appUrl}/expenses" style="background: #dc2626; border-radius: 8px; color: #fff; font-size: 16px; font-weight: bold; text-decoration: none; text-align: center; display: block; padding: 14px 20px; margin: 24px 0;">
+            View Expenses
+          </a>
+
+          <p style="color: #8898aa; font-size: 12px; text-align: center; margin: 24px 0;">
+            This is an automated notification from your Expense Management System.
+          </p>
+        </div>
+      `;
+
+      await resend.emails.send({
+        from: 'Expense Manager <onboarding@resend.dev>',
+        to: [accountant?.email || ''],
+        subject: `✕ Expense Rejected: ₹${Number(expense.amount).toLocaleString('en-IN')}`,
+        html: emailContent,
+      });
+
+      console.log(`Sent rejection notification to ${accountant?.email}`);
     }
 
     return new Response(
