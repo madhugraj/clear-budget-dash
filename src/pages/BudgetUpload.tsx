@@ -22,6 +22,7 @@ export default function BudgetUpload() {
   const [fiscalYear, setFiscalYear] = useState<string>('FY25-26');
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<BudgetMasterRow[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,6 +104,8 @@ export default function BudgetUpload() {
         .filter((row): row is BudgetMasterRow => row !== null);
 
       setPreview(budgetRows);
+      // Select all items by default
+      setSelectedItems(new Set(budgetRows.map((_, index) => index)));
       
       if (budgetRows.length === 0) {
         toast({
@@ -135,14 +138,24 @@ export default function BudgetUpload() {
       return;
     }
 
+    if (selectedItems.size === 0) {
+      toast({
+        title: 'No items selected',
+        description: 'Please select at least one item to upload',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Insert budget master items
-      const budgetItems = preview.map(item => ({
+      // Insert only selected budget master items
+      const selectedPreview = preview.filter((_, index) => selectedItems.has(index));
+      const budgetItems = selectedPreview.map(item => ({
         fiscal_year: fiscalYear,
         serial_no: item.serial_no,
         item_name: item.item_name,
@@ -170,6 +183,7 @@ export default function BudgetUpload() {
       // Reset form
       setFile(null);
       setPreview([]);
+      setSelectedItems(new Set());
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     } catch (error: any) {
@@ -251,15 +265,47 @@ export default function BudgetUpload() {
 
           {preview.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileSpreadsheet className="h-4 w-4" />
-                <span>Preview: {preview.length} items</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>Preview: {preview.length} items ({selectedItems.size} selected)</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedItems(new Set(preview.map((_, i) => i)))}
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedItems(new Set())}
+                  >
+                    Deselect All
+                  </Button>
+                </div>
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <div className="max-h-96 overflow-y-auto">
                   <table className="w-full">
                     <thead className="bg-muted sticky top-0">
                       <tr>
+                        <th className="text-left p-3 font-medium w-12">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.size === preview.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedItems(new Set(preview.map((_, i) => i)));
+                              } else {
+                                setSelectedItems(new Set());
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                        </th>
                         <th className="text-left p-3 font-medium">S.No</th>
                         <th className="text-left p-3 font-medium">Item</th>
                         <th className="text-left p-3 font-medium">Category</th>
@@ -271,6 +317,22 @@ export default function BudgetUpload() {
                     <tbody>
                       {preview.map((row, index) => (
                         <tr key={index} className="border-t hover:bg-muted/50">
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedItems.has(index)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedItems);
+                                if (e.target.checked) {
+                                  newSelected.add(index);
+                                } else {
+                                  newSelected.delete(index);
+                                }
+                                setSelectedItems(newSelected);
+                              }}
+                              className="cursor-pointer"
+                            />
+                          </td>
                           <td className="p-3">{row.serial_no}</td>
                           <td className="p-3">{row.item_name}</td>
                           <td className="p-3 text-muted-foreground">{row.category}</td>

@@ -36,18 +36,18 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      // Get current fiscal year budget
-      const currentYear = new Date().getFullYear();
+      // Get current fiscal year budget from budget_master
       const { data: budgetData, error: budgetError } = await supabase
-        .from('budget_items')
-        .select('allocated_amount')
-        .eq('fiscal_year', currentYear);
+        .from('budget_master')
+        .select('annual_budget')
+        .eq('fiscal_year', 'FY25-26');
 
       if (budgetError) throw budgetError;
 
-      const totalBudget = budgetData?.reduce((sum, item) => sum + Number(item.allocated_amount), 0) || 0;
+      const totalBudget = budgetData?.reduce((sum, item) => sum + Number(item.annual_budget), 0) || 0;
 
       // Get approved expenses for current year
+      const currentYear = new Date().getFullYear();
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('amount, status')
