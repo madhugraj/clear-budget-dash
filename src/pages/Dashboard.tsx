@@ -301,7 +301,9 @@ export default function Dashboard() {
               budget: (item.budget * 7) / 12, // Show prorated budget
               actual: item.amount,
               overAmount: item.amount - ((item.budget * 7) / 12),
-              utilization: item.utilization,
+              utilization: ((item.budget * 7) / 12) > 0 
+                ? (item.amount / ((item.budget * 7) / 12)) * 100 
+                : 0,
               category: item.category,
               committee: item.committee,
             }))
