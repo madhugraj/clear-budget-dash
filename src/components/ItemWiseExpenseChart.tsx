@@ -43,25 +43,26 @@ export function ItemWiseExpenseChart({ data }: ItemWiseExpenseChartProps) {
         <CardDescription>Budget utilization by item (showing highest spenders)</CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
+        <ResponsiveContainer width="100%" height={600}>
           <BarChart 
             data={data} 
             layout="vertical"
-            margin={{ left: 100, right: 30, top: 10, bottom: 10 }}
+            margin={{ left: 150, right: 40, top: 20, bottom: 20 }}
           >
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis 
               type="number"
               tickFormatter={formatCurrency}
-              className="text-xs"
+              className="text-sm"
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             />
             <YAxis 
               type="category"
               dataKey="item_name" 
-              width={90}
-              className="text-xs"
+              width={140}
+              className="text-sm"
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
+              interval={0}
             />
             <Tooltip 
               formatter={(value: number) => formatCurrency(value)}
@@ -75,7 +76,8 @@ export function ItemWiseExpenseChart({ data }: ItemWiseExpenseChartProps) {
             <Bar 
               dataKey="amount" 
               name="Spent"
-              radius={[0, 4, 4, 0]}
+              radius={[0, 6, 6, 0]}
+              barSize={35}
             >
               {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.utilization)} />
