@@ -19,20 +19,25 @@ import {
 import { cn } from '@/lib/utils';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Upload Budget', href: '/budget-upload', icon: Upload },
-  { name: 'Add Expense', href: '/expenses', icon: Receipt },
-  { name: 'Approvals', href: '/approvals', icon: CheckCircle },
-  { name: 'Historical Data', href: '/historical', icon: History },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['treasurer', 'accountant', 'general'] },
+  { name: 'Upload Budget', href: '/budget-upload', icon: Upload, roles: ['treasurer'] },
+  { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
+  { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
+  { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { signOut } = useAuth();
+  const { signOut, userRole } = useAuth();
   const location = useLocation();
+  
+  // Filter navigation based on user role
+  const filteredNavigation = navigation.filter(item => 
+    userRole && item.roles.includes(userRole)
+  );
 
   const NavLinks = () => (
     <>
-      {navigation.map((item) => {
+      {filteredNavigation.map((item) => {
         const isActive = location.pathname === item.href;
         return (
           <Link
@@ -68,6 +73,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <div className="flex flex-col h-full">
                 <div className="p-6 border-b">
                   <h2 className="text-xl font-bold text-primary">Expense Manager</h2>
+                  {userRole && (
+                    <p className="text-xs text-muted-foreground mt-1 capitalize">
+                      {userRole === 'treasurer' ? 'Admin' : userRole}
+                    </p>
+                  )}
                 </div>
                 <nav className="flex-1 p-4 space-y-1">
                   <NavLinks />
@@ -96,6 +106,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="flex flex-col h-full">
             <div className="p-6 border-b">
               <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
+              {userRole && (
+                <p className="text-sm text-muted-foreground mt-1 capitalize">
+                  {userRole === 'treasurer' ? 'Admin' : userRole}
+                </p>
+              )}
             </div>
             <nav className="flex-1 p-4 space-y-1">
               <NavLinks />

@@ -39,7 +39,7 @@ const App = () => (
             <Route
               path="/budget-upload"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <BudgetUpload />
                   </AppLayout>
@@ -59,7 +59,7 @@ const App = () => (
             <Route
               path="/approvals"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <Approvals />
                   </AppLayout>
