@@ -17,20 +17,20 @@ export function MonthlyExpenseChart({ data }: MonthlyExpenseChartProps) {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0,
-      notation: 'compact',
     }).format(value);
   };
 
   const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
-      const budget = payload[0]?.value || 0;
-      const actual = payload[1]?.value || 0;
+      const point = payload[0]?.payload as MonthlyData;
+      const budget = point?.budget ?? 0;
+      const actual = point?.amount ?? 0;
       const variance = budget - actual;
       const isWithinBudget = variance >= 0;
 
       return (
         <div className="bg-card border border-border rounded-lg p-4 shadow-lg">
-          <p className="font-semibold mb-2">{payload[0]?.payload?.month}</p>
+          <p className="font-semibold mb-2">{point.month}</p>
           <div className="space-y-1 text-sm">
             <p className="flex justify-between gap-4">
               <span className="text-muted-foreground">Budget:</span>
@@ -48,7 +48,7 @@ export function MonthlyExpenseChart({ data }: MonthlyExpenseChartProps) {
                 </span>
               </p>
               <p className={`text-xs font-medium mt-1 ${isWithinBudget ? 'text-success' : 'text-destructive'}`}>
-                {isWithinBudget ? '✓ Within Budget' : '⚠ Over Budget'}
+                {isWithinBudget ? 'Within Budget' : 'Over Budget'}
               </p>
             </div>
           </div>
