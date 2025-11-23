@@ -292,12 +292,15 @@ export default function Dashboard() {
       <div className="animate-[fade-in_0.6s_ease-out_0.3s_both]">
         <OverBudgetAlert 
           items={allItemData
-            .filter(item => item.amount > item.budget)
+            .filter(item => {
+              const proratedBudget = (item.budget * 7) / 12; // 7 months elapsed (Apr-Oct)
+              return item.amount > proratedBudget;
+            })
             .map(item => ({
               item_name: item.full_item_name,
-              budget: item.budget,
+              budget: (item.budget * 7) / 12, // Show prorated budget
               actual: item.amount,
-              overAmount: item.amount - item.budget,
+              overAmount: item.amount - ((item.budget * 7) / 12),
               utilization: item.utilization,
               category: item.category,
               committee: item.committee,
