@@ -7,6 +7,7 @@ import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
 import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 import { BudgetMeter } from '@/components/BudgetMeter';
+import { OverBudgetAlert } from '@/components/OverBudgetAlert';
 
 interface DashboardStats {
   totalBudget: number;
@@ -246,6 +247,22 @@ export default function Dashboard() {
       <BudgetMeter 
         budget={stats?.totalBudget || 0} 
         spent={stats?.totalExpenses || 0}
+      />
+
+      {/* Over Budget Alert */}
+      <OverBudgetAlert 
+        items={allItemData
+          .filter(item => item.amount > item.budget)
+          .map(item => ({
+            item_name: item.full_item_name,
+            budget: item.budget,
+            actual: item.amount,
+            overAmount: item.amount - item.budget,
+            utilization: item.utilization,
+            category: item.category,
+            committee: item.committee,
+          }))
+        }
       />
 
       {/* Minimal Stats Cards */}

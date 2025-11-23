@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useState, useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 interface ItemDetail {
   item_name: string;
@@ -128,6 +129,48 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                 <p className="text-muted-foreground mb-1">Committee</p>
                 <p className="font-medium">{currentItem.committee}</p>
               </div>
+            </div>
+
+            {/* Visual Graph */}
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
+                    { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                  ]}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                  />
+                  <YAxis 
+                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '6px',
+                      fontSize: '12px'
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    {[
+                      { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
+                      { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                    ].map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
 
             {/* Main Calculation Display */}
