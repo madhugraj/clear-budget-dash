@@ -316,7 +316,7 @@ export default function Expenses() {
       }
 
       // Insert expense
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('expenses')
         .insert({
           budget_master_id: selectedBudgetItem,
@@ -326,9 +326,15 @@ export default function Expenses() {
           invoice_url: invoiceUrl,
           claimed_by: user.id,
           status: 'pending',
-        });
+        })
+        .select();
 
       if (error) throw error;
+
+      // Send email notification in the background
+      supabase.functions.invoke('send-expense-notification', {
+        body: { expenseId: data?.[0]?.id, action: 'submitted' }
+      }).then(() => console.log('Email notification sent')).catch(err => console.error('Email failed:', err));
 
       toast({
         title: 'Success!',
