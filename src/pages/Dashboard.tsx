@@ -46,13 +46,8 @@ export default function Dashboard() {
   const { userRole, user } = useAuth();
 
   useEffect(() => {
-    // Only load data if user is authenticated
-    if (user) {
-      loadDashboardData();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
+    loadDashboardData();
+  }, []);
 
   const loadDashboardData = async () => {
     try {
@@ -236,21 +231,6 @@ export default function Dashboard() {
             <Skeleton className="h-[400px]" />
             <Skeleton className="h-[400px]" />
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show welcome message for unauthenticated users
-  if (!user) {
-    return (
-      <div className="space-y-6 md:space-y-8 animate-fade-in max-w-[1600px] mx-auto px-4 md:px-6">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-          <h1 className="text-4xl font-bold mb-4">Prestige Bella Vista</h1>
-          <h2 className="text-2xl font-light text-muted-foreground mb-6">Expense Management System</h2>
-          <p className="text-muted-foreground max-w-md">
-            Please log in to access the dashboard and manage your expenses.
-          </p>
         </div>
       </div>
     );
