@@ -12,8 +12,7 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_ANON_KEY!
 );
 
-// The 16 items that were updated previously
-const updatedItems = [48, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
+// Investigate ALL items, not just specific ones
 
 interface ExcelData {
   serial_no: number;
@@ -69,12 +68,11 @@ async function investigateDiscrepancy() {
   console.log(`   Total Annual Budget: ₹${totalExcelAnnual.toLocaleString('en-IN')}`);
   console.log(`   Total Monthly Budget: ₹${totalExcelMonthly.toLocaleString('en-IN')}`);
   
-  // Fetch database data for the 16 items
+  // Fetch database data for ALL items
   const { data: dbData, error } = await supabase
     .from('budget_master')
     .select('serial_no, item_name, annual_budget, monthly_budget')
     .eq('fiscal_year', 'FY25-26')
-    .in('serial_no', updatedItems)
     .order('serial_no');
   
   if (error) {
@@ -101,7 +99,7 @@ async function investigateDiscrepancy() {
   }
   
   console.log('\n' + '='.repeat(80));
-  console.log('COMPARISON OF 16 UPDATED ITEMS (Excel vs Database)');
+  console.log('COMPARISON OF ALL ITEMS (Excel vs Database)');
   console.log('='.repeat(80));
   
   const corrections: Array<{serial_no: number, excel_annual: number, excel_monthly: number, db_annual: number, db_monthly: number}> = [];
@@ -146,7 +144,8 @@ async function investigateDiscrepancy() {
   console.log('\n' + '='.repeat(80));
   console.log('SUMMARY');
   console.log('='.repeat(80));
-  console.log(`Items needing correction: ${corrections.length} of 16`);
+  console.log(`Total items checked: ${dbData?.length || 0}`);
+  console.log(`Items needing correction: ${corrections.length}`);
   console.log(`Total Annual Discrepancy from these items: ₹${totalAnnualDiscrepancy.toLocaleString('en-IN')}`);
   console.log(`Total Monthly Discrepancy from these items: ₹${totalMonthlyDiscrepancy.toLocaleString('en-IN')}`);
   
