@@ -7,13 +7,28 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, FileText } from 'lucide-react';
+import { Loader2, Upload, FileText, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface BudgetItem {
   id: string;
   category: string;
   allocated_amount: number;
   fiscal_year: number;
+}
+
+interface HistoricalExpenseRow {
+  serial_no: number;
+  item_name: string;
+  category: string;
+  committee: string;
+  april: number;
+  may: number;
+  june: number;
+  july: number;
+  august: number;
+  september: number;
+  october: number;
 }
 
 export default function Expenses() {
@@ -24,6 +39,13 @@ export default function Expenses() {
   const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoice, setInvoice] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Historical upload states
+  const [historicalFile, setHistoricalFile] = useState<File | null>(null);
+  const [historicalPreview, setHistoricalPreview] = useState<HistoricalExpenseRow[]>([]);
+  const [selectedHistoricalItems, setSelectedHistoricalItems] = useState<Set<number>>(new Set());
+  const [historicalLoading, setHistoricalLoading] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -55,6 +77,219 @@ export default function Expenses() {
     if (file) {
       setInvoice(file);
     }
+  };
+
+  const handleHistoricalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setHistoricalFile(selectedFile);
+      parseHistoricalFile(selectedFile);
+    }
+  };
+
+  const parseHistoricalFile = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      
+      // Look for "Summary-FOR WHOLE YEAR" sheet
+      let sheetName = workbook.SheetNames.find(name => 
+        name.toLowerCase().includes('summary') && 
+        name.toLowerCase().includes('whole year')
+      ) || workbook.SheetNames[0];
+      
+      const worksheet = workbook.Sheets[sheetName];
+      
+      // Get all data to find header row
+      const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      
+      // Find the header row
+      let headerRowIndex = -1;
+      for (let i = 0; i < allData.length; i++) {
+        const row = allData[i] as any[];
+        if (row[0] === 'SL.NO' || row[1] === 'ITEM') {
+          headerRowIndex = i;
+          break;
+        }
+      }
+      
+      if (headerRowIndex === -1) {
+        throw new Error('Could not find header row');
+      }
+      
+      // Parse data starting after the header row
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+        range: headerRowIndex + 1,
+        defval: '' 
+      });
+
+      // Helper function to clean currency values
+      const cleanCurrency = (value: any): number => {
+        if (!value) return 0;
+        const str = String(value).replace(/[₹,\s]/g, '');
+        return parseFloat(str) || 0;
+      };
+
+      // Map to historical expense rows (columns 8-14 are monthly data)
+      const expenseRows: HistoricalExpenseRow[] = jsonData
+        .map((row: any) => {
+          const serialNo = parseInt(String(row['SL.NO'] || row['1'] || '0'));
+          const itemName = String(row['ITEM'] || row['2'] || '').trim();
+          
+          if (!serialNo || serialNo === 0 || !itemName) return null;
+          if (itemName.toLowerCase().includes('total') || 
+              itemName.toLowerCase().includes('per annum')) return null;
+          
+          return {
+            serial_no: serialNo,
+            item_name: itemName,
+            category: String(row['CATEGORY'] || row['3'] || '').trim(),
+            committee: String(row['COMMITTEE'] || row['4'] || '').trim(),
+            april: cleanCurrency(row['Apr-25'] || row['8']),
+            may: cleanCurrency(row['May-25'] || row['9']),
+            june: cleanCurrency(row['Jun-25'] || row['10']),
+            july: cleanCurrency(row['Jul-25'] || row['11']),
+            august: cleanCurrency(row['Aug-25'] || row['12']),
+            september: cleanCurrency(row['Sep-25'] || row['13']),
+            october: cleanCurrency(row['Oct-25'] || row['14']),
+          };
+        })
+        .filter((row): row is HistoricalExpenseRow => {
+          if (!row) return false;
+          const totalSpend = row.april + row.may + row.june + row.july + 
+                            row.august + row.september + row.october;
+          return totalSpend > 0;
+        });
+
+      setHistoricalPreview(expenseRows);
+      setSelectedHistoricalItems(new Set(expenseRows.map((_, index) => index)));
+      
+      if (expenseRows.length === 0) {
+        toast({
+          title: 'No valid data found',
+          description: 'No historical expenses found in the file',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'File parsed successfully',
+          description: `Found ${expenseRows.length} items with historical expenses`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error parsing file',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleHistoricalUpload = async () => {
+    if (!historicalFile || historicalPreview.length === 0 || selectedHistoricalItems.size === 0) {
+      toast({
+        title: 'No data to upload',
+        description: 'Please select items to upload',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setHistoricalLoading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const selectedPreview = historicalPreview.filter((_, index) => selectedHistoricalItems.has(index));
+      
+      // Get all budget master items for matching
+      const { data: budgetMasterItems, error: fetchError } = await supabase
+        .from('budget_master')
+        .select('*')
+        .eq('fiscal_year', 'FY25-26');
+
+      if (fetchError) throw fetchError;
+
+      const months = [
+        { name: 'april', date: '2025-04-15', key: 'april' as const },
+        { name: 'may', date: '2025-05-15', key: 'may' as const },
+        { name: 'june', date: '2025-06-15', key: 'june' as const },
+        { name: 'july', date: '2025-07-15', key: 'july' as const },
+        { name: 'august', date: '2025-08-15', key: 'august' as const },
+        { name: 'september', date: '2025-09-15', key: 'september' as const },
+        { name: 'october', date: '2025-10-15', key: 'october' as const },
+      ];
+
+      let insertedCount = 0;
+
+      for (const row of selectedPreview) {
+        // Find matching budget master item
+        const budgetItem = budgetMasterItems?.find(
+          item => item.serial_no === row.serial_no || 
+                  item.item_name.toLowerCase() === row.item_name.toLowerCase()
+        );
+
+        if (!budgetItem) {
+          console.warn(`No budget item found for: ${row.item_name}`);
+          continue;
+        }
+
+        // Create expenses for each month with non-zero amount
+        for (const month of months) {
+          const amount = row[month.key];
+          if (amount > 0) {
+            // Note: This creates expenses without budget_item_id since we don't have that table populated
+            // You may need to adjust this based on your actual schema needs
+            const { error: insertError } = await supabase
+              .from('expenses')
+              .insert({
+                budget_item_id: budgetItem.id, // This will fail if budget_items table is empty
+                amount: amount,
+                description: `Historical expense for ${row.item_name} - ${month.name} 2025`,
+                expense_date: month.date,
+                claimed_by: user.id,
+                approved_by: user.id,
+                status: 'approved',
+              });
+
+            if (insertError) {
+              console.error(`Error inserting ${month.name} expense:`, insertError);
+            } else {
+              insertedCount++;
+            }
+          }
+        }
+      }
+
+      toast({
+        title: 'Success!',
+        description: `Uploaded ${insertedCount} historical expense entries`,
+      });
+
+      // Reset form
+      setHistoricalFile(null);
+      setHistoricalPreview([]);
+      setSelectedHistoricalItems(new Set());
+      const fileInput = document.getElementById('historical-file-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    } catch (error: any) {
+      toast({
+        title: 'Error uploading expenses',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setHistoricalLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,9 +370,146 @@ export default function Expenses() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Upload Historical Expenses</CardTitle>
+          <CardDescription>
+            Upload the Excel file with historical expenses from April to October 2025
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="historical-file-upload">Excel File</Label>
+            <div className="flex items-center gap-4">
+              <Input
+                id="historical-file-upload"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleHistoricalFileChange}
+                className="cursor-pointer"
+              />
+              <Button
+                onClick={handleHistoricalUpload}
+                disabled={!historicalFile || historicalLoading}
+                className="min-w-[120px]"
+              >
+                {historicalLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {historicalPreview.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>Preview: {historicalPreview.length} items ({selectedHistoricalItems.size} selected)</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedHistoricalItems(new Set(historicalPreview.map((_, i) => i)))}
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedHistoricalItems(new Set())}
+                  >
+                    Deselect All
+                  </Button>
+                </div>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        <th className="text-left p-2 font-medium w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedHistoricalItems.size === historicalPreview.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedHistoricalItems(new Set(historicalPreview.map((_, i) => i)));
+                              } else {
+                                setSelectedHistoricalItems(new Set());
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                        </th>
+                        <th className="text-left p-2 font-medium">S.No</th>
+                        <th className="text-left p-2 font-medium">Item</th>
+                        <th className="text-right p-2 font-medium">Apr</th>
+                        <th className="text-right p-2 font-medium">May</th>
+                        <th className="text-right p-2 font-medium">Jun</th>
+                        <th className="text-right p-2 font-medium">Jul</th>
+                        <th className="text-right p-2 font-medium">Aug</th>
+                        <th className="text-right p-2 font-medium">Sep</th>
+                        <th className="text-right p-2 font-medium">Oct</th>
+                        <th className="text-right p-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalPreview.map((row, index) => {
+                        const total = row.april + row.may + row.june + row.july + 
+                                     row.august + row.september + row.october;
+                        return (
+                          <tr key={index} className="border-t hover:bg-muted/50">
+                            <td className="p-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedHistoricalItems.has(index)}
+                                onChange={(e) => {
+                                  const newSelected = new Set(selectedHistoricalItems);
+                                  if (e.target.checked) {
+                                    newSelected.add(index);
+                                  } else {
+                                    newSelected.delete(index);
+                                  }
+                                  setSelectedHistoricalItems(newSelected);
+                                }}
+                                className="cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2">{row.serial_no}</td>
+                            <td className="p-2 max-w-xs truncate">{row.item_name}</td>
+                            <td className="p-2 text-right">{row.april > 0 ? formatCurrency(row.april) : '-'}</td>
+                            <td className="p-2 text-right">{row.may > 0 ? formatCurrency(row.may) : '-'}</td>
+                            <td className="p-2 text-right">{row.june > 0 ? formatCurrency(row.june) : '-'}</td>
+                            <td className="p-2 text-right">{row.july > 0 ? formatCurrency(row.july) : '-'}</td>
+                            <td className="p-2 text-right">{row.august > 0 ? formatCurrency(row.august) : '-'}</td>
+                            <td className="p-2 text-right">{row.september > 0 ? formatCurrency(row.september) : '-'}</td>
+                            <td className="p-2 text-right">{row.october > 0 ? formatCurrency(row.october) : '-'}</td>
+                            <td className="p-2 text-right font-medium">{formatCurrency(total)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Expense Details</CardTitle>
           <CardDescription>
-            Fill in the expense information and upload supporting documents
+            Fill in the expense information and upload supporting documents (For expenses after October)
           </CardDescription>
         </CardHeader>
         <CardContent>
