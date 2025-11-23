@@ -14,9 +14,13 @@ interface Expense {
   status: string;
   expense_date: string;
   invoice_url: string | null;
-  budget_items: {
+  created_at: string;
+  budget_master: {
+    item_name: string;
     category: string;
-  };
+    committee: string;
+    annual_budget: number;
+  } | null;
   profiles: {
     full_name: string;
     email: string;
@@ -45,7 +49,13 @@ export default function Approvals() {
           status,
           expense_date,
           invoice_url,
-          budget_items (category),
+          created_at,
+          budget_master!expenses_budget_master_id_fkey (
+            item_name,
+            category,
+            committee,
+            annual_budget
+          ),
           profiles!expenses_claimed_by_fkey (full_name, email)
         `)
         .eq('status', 'pending')
@@ -169,19 +179,26 @@ export default function Approvals() {
           {expenses.map((expense) => (
             <Card key={expense.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl">{expense.description}</CardTitle>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>{expense.budget_items?.category}</span>
-                      <span>•</span>
-                      <span>{new Date(expense.expense_date).toLocaleDateString()}</span>
-                      <span>•</span>
-                      <span>By {expense.profiles?.full_name || expense.profiles?.email}</span>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <CardTitle className="text-lg">{expense.description}</CardTitle>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
+                        <span>•</span>
+                        <span>{expense.budget_master?.category}</span>
+                        <span>•</span>
+                        <span>{expense.budget_master?.committee}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>{new Date(expense.expense_date).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>By {expense.profiles?.full_name || expense.profiles?.email}</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{formatCurrency(Number(expense.amount))}</div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xl font-bold">{formatCurrency(Number(expense.amount))}</div>
                     <Badge variant="secondary" className="mt-1">Pending</Badge>
                   </div>
                 </div>
@@ -252,6 +269,13 @@ export default function Approvals() {
           {selectedExpense && (
             <div className="space-y-4">
               <div>
+                <label className="text-sm font-medium text-muted-foreground">Budget Item</label>
+                <p className="mt-1 font-medium">{selectedExpense.budget_master?.item_name || 'N/A'}</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {selectedExpense.budget_master?.category} • {selectedExpense.budget_master?.committee}
+                </p>
+              </div>
+              <div>
                 <label className="text-sm font-medium text-muted-foreground">Description</label>
                 <p className="mt-1">{selectedExpense.description}</p>
               </div>
@@ -261,19 +285,39 @@ export default function Approvals() {
                   <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount))}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Date</label>
-                  <p className="mt-1">{new Date(selectedExpense.expense_date).toLocaleDateString()}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Budget</label>
+                  <p className="mt-1">{formatCurrency(Number(selectedExpense.budget_master?.annual_budget || 0))}</p>
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Category</label>
-                <p className="mt-1">{selectedExpense.budget_items?.category}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Expense Date</label>
+                  <p className="mt-1">{new Date(selectedExpense.expense_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Submitted</label>
+                  <p className="mt-1">{new Date(selectedExpense.created_at).toLocaleDateString()}</p>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Claimed By</label>
                 <p className="mt-1">{selectedExpense.profiles?.full_name}</p>
                 <p className="text-sm text-muted-foreground">{selectedExpense.profiles?.email}</p>
               </div>
+              {selectedExpense.invoice_url && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Invoice</label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 w-full"
+                    onClick={() => window.open(selectedExpense.invoice_url!, '_blank')}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Invoice
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

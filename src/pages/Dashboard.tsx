@@ -3,11 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
 import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 import { BudgetMeter } from '@/components/BudgetMeter';
 import { OverBudgetAlert } from '@/components/OverBudgetAlert';
+import { RoleBadge } from '@/components/RoleBadge';
 
 interface DashboardStats {
   totalBudget: number;
@@ -41,6 +43,7 @@ export default function Dashboard() {
   const [allCommittees, setAllCommittees] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { userRole, user } = useAuth();
 
   useEffect(() => {
     loadDashboardData();
@@ -236,8 +239,20 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in max-w-[1600px] mx-auto px-4 md:px-6">
       {/* Minimal Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-        <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
+          {userRole && (
+            <div className="flex items-center gap-2">
+              <RoleBadge role={userRole} size="sm" />
+              <span className="text-xs text-muted-foreground">
+                {userRole === 'treasurer' && 'Full system access'}
+                {userRole === 'accountant' && 'Can add expenses'}
+                {userRole === 'general' && 'View-only access'}
+              </span>
+            </div>
+          )}
+        </div>
         <div className="text-sm text-muted-foreground">
           Fiscal Year 2025-26
         </div>
@@ -303,15 +318,34 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-none">
+        <Card 
+          className={`border-none shadow-none ${
+            userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0
+              ? 'cursor-pointer hover:shadow-md transition-all ring-2 ring-warning/50 animate-pulse'
+              : ''
+          }`}
+          onClick={() => {
+            if (userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0) {
+              window.location.href = '/approvals';
+            }
+          }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
               Pending Approvals
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-lg md:text-xl font-semibold break-words">{stats?.pendingApprovals || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Awaiting review</p>
+            <div className={`text-lg md:text-xl font-semibold break-words ${
+              stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'text-warning' : ''
+            }`}>
+              {stats?.pendingApprovals || 0}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 
+                ? 'Click to review' 
+                : 'Awaiting review'}
+            </p>
           </CardContent>
         </Card>
       </div>
