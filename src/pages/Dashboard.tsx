@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
-import { SingleItemDetailView } from '@/components/SingleItemDetailView';
+import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 
 interface DashboardStats {
   totalBudget: number;
@@ -23,6 +23,7 @@ interface MonthlyData {
 
 interface ItemData {
   item_name: string;
+  full_item_name: string;
   amount: number;
   budget: number;
   utilization: number;
@@ -165,6 +166,7 @@ export default function Dashboard() {
       const allItemChartData = Object.entries(itemMap)
         .map(([item_name, data]) => ({
           item_name: item_name.length > 25 ? item_name.substring(0, 25) + '...' : item_name,
+          full_item_name: item_name,
           amount: data.amount,
           budget: data.budget,
           utilization: data.budget > 0 ? (data.amount / data.budget) * 100 : 0,
@@ -300,10 +302,11 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Single Item Detail View */}
-      <SingleItemDetailView 
+      {/* Item-wise Budget Analysis */}
+      <ItemAnalysisCard 
         items={allItemData.map(item => ({
           item_name: item.item_name,
+          full_item_name: item.full_item_name,
           budget: item.budget,
           actual: item.amount,
           utilization: item.utilization,
