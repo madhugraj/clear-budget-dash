@@ -59,12 +59,12 @@ export function MonthlyExpenseChart({ data }: MonthlyExpenseChartProps) {
   };
 
   return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base font-normal">Monthly Spending Analysis</CardTitle>
-        <CardDescription className="text-xs">Budget vs Actual</CardDescription>
+    <Card className="border-none shadow-none bg-transparent">
+      <CardHeader className="pb-4 px-6">
+        <CardTitle className="text-lg font-semibold">Monthly Spending Analysis</CardTitle>
+        <CardDescription className="text-sm">Budget vs Actual Comparison</CardDescription>
       </CardHeader>
-      <CardContent className="px-2">
+      <CardContent className="px-2 pb-4">
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />

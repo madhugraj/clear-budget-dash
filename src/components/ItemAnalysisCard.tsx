@@ -96,10 +96,10 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
   const projections = getProjections(currentItem);
 
   return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="pb-3 space-y-2">
-        <CardTitle className="text-base font-normal">Item-wise Budget Analysis</CardTitle>
-        <CardDescription className="text-xs">
+    <Card className="border-none shadow-lg bg-gradient-to-br from-card via-card to-primary/5">
+      <CardHeader className="pb-3 space-y-2 px-6">
+        <CardTitle className="text-lg font-semibold">Item-wise Budget Analysis</CardTitle>
+        <CardDescription className="text-sm">
           Select category, committee, and item to view detailed calculations
         </CardDescription>
         

@@ -105,9 +105,9 @@ export function ItemWiseExpenseChart({
   };
 
   return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base font-normal">Top 10 Items by Spending</CardTitle>
+    <Card className="border-none shadow-none bg-transparent">
+      <CardHeader className="pb-3 px-6">
+        <CardTitle className="text-lg font-semibold">Top 10 Items by Spending</CardTitle>
         <div className="flex gap-2 flex-wrap mt-3">
           <Select value={selectedCategory} onValueChange={handleCategoryChange}>
             <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">

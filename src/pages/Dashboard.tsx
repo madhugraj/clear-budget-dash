@@ -237,52 +237,69 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 md:space-y-8 animate-fade-in max-w-[1600px] mx-auto px-4 md:px-6">
-      {/* Minimal Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
-          {userRole && (
-            <div className="flex items-center gap-2">
-              <RoleBadge role={userRole} size="sm" />
-              <span className="text-xs text-muted-foreground">
-                {userRole === 'treasurer' && 'Full system access'}
-                {userRole === 'accountant' && 'Can add expenses'}
-                {userRole === 'general' && 'View-only access'}
-              </span>
+    <div className="space-y-6 md:space-y-10 animate-fade-in max-w-[1600px] mx-auto">
+      {/* Hero Header Section */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 p-8 md:p-12 border border-primary/10">
+        <div className="relative z-10">
+          <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+            Prestige Bella Vista
+          </h1>
+          <p className="text-xl md:text-2xl font-light text-foreground/80 mb-6">
+            Expense Management System
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm">
+            {userRole && (
+              <div className="flex items-center gap-2">
+                <RoleBadge role={userRole} size="sm" />
+                <span className="text-muted-foreground">
+                  {userRole === 'treasurer' && 'Full system access'}
+                  {userRole === 'accountant' && 'Can add expenses'}
+                  {userRole === 'general' && 'View-only access'}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-background/50 backdrop-blur-sm rounded-full border border-border">
+              <span className="text-muted-foreground">Fiscal Year</span>
+              <span className="font-semibold text-foreground">2025-26</span>
             </div>
-          )}
+          </div>
         </div>
-        <div className="text-sm text-muted-foreground whitespace-nowrap">
-          Fiscal Year 2025-26
-        </div>
+        
+        {/* Decorative Elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-0"></div>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl -z-0"></div>
       </div>
 
       {/* Budget Meter - Hero Section */}
-      <BudgetMeter 
-        budget={stats?.totalBudget || 0} 
-        spent={stats?.totalExpenses || 0}
-      />
+      <div className="animate-[fade-in_0.6s_ease-out_0.2s_both]">
+        <BudgetMeter 
+          budget={stats?.totalBudget || 0} 
+          spent={stats?.totalExpenses || 0}
+        />
+      </div>
 
       {/* Over Budget Alert */}
-      <OverBudgetAlert 
-        items={allItemData
-          .filter(item => item.amount > item.budget)
-          .map(item => ({
-            item_name: item.full_item_name,
-            budget: item.budget,
-            actual: item.amount,
-            overAmount: item.amount - item.budget,
-            utilization: item.utilization,
-            category: item.category,
-            committee: item.committee,
-          }))
-        }
-      />
+      <div className="animate-[fade-in_0.6s_ease-out_0.3s_both]">
+        <OverBudgetAlert 
+          items={allItemData
+            .filter(item => item.amount > item.budget)
+            .map(item => ({
+              item_name: item.full_item_name,
+              budget: item.budget,
+              actual: item.amount,
+              overAmount: item.amount - item.budget,
+              utilization: item.utilization,
+              category: item.category,
+              committee: item.committee,
+            }))
+          }
+        />
+      </div>
 
       {/* Minimal Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-none shadow-none">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-[fade-in_0.6s_ease-out_0.4s_both]">
+        <Card className="border-none shadow-none bg-gradient-to-br from-card to-primary/5 hover:shadow-md transition-all">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
               Total Budget
@@ -294,7 +311,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-none">
+        <Card className="border-none shadow-none bg-gradient-to-br from-card to-accent/5 hover:shadow-md transition-all">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
               Total Expenses
@@ -306,7 +323,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-none">
+        <Card className="border-none shadow-none bg-gradient-to-br from-card to-success/5 hover:shadow-md transition-all">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
               Balance
@@ -319,9 +336,9 @@ export default function Dashboard() {
         </Card>
 
         <Card 
-          className={`border-none shadow-none ${
+          className={`border-none shadow-none bg-gradient-to-br from-card to-warning/5 hover:shadow-md transition-all ${
             userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0
-              ? 'cursor-pointer hover:shadow-md transition-all ring-2 ring-warning/50 animate-pulse'
+              ? 'cursor-pointer ring-2 ring-warning/30 animate-pulse hover:ring-warning/50'
               : ''
           }`}
           onClick={() => {
@@ -351,16 +368,16 @@ export default function Dashboard() {
       </div>
 
       {/* Expense Visualizations */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 animate-[fade-in_0.6s_ease-out_0.5s_both]">
         <div className="w-full overflow-hidden">
-          <Card className="border-none shadow-none">
+          <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
             <CardContent className="p-0">
               <MonthlyExpenseChart data={monthlyData} />
             </CardContent>
           </Card>
         </div>
         <div className="w-full overflow-hidden">
-          <Card className="border-none shadow-none">
+          <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
             <CardContent className="p-0">
               <ItemWiseExpenseChart 
                 data={itemData} 
@@ -375,7 +392,7 @@ export default function Dashboard() {
       </div>
 
       {/* Item-wise Budget Analysis */}
-      <div className="w-full">
+      <div className="w-full animate-[fade-in_0.6s_ease-out_0.6s_both]">
         <ItemAnalysisCard 
           items={allItemData.map(item => ({
             item_name: item.item_name,
