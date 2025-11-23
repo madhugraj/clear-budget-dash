@@ -71,18 +71,26 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
 
   // Calculate projections
   const getProjections = (item: ItemDetail | undefined) => {
-    if (!item) return { projected: 0, projectedUtilization: 0, monthlyAvg: 0 };
+    if (!item) return { projected: 0, projectedUtilization: 0, monthlyAvg: 0, runRate: 0 };
     
-    // FY 2025-26: April 2025 to March 2026
-    // Current data is till October 2025 (7 months: Apr, May, Jun, Jul, Aug, Sep, Oct)
+    // FY 2025-26: April 2025 to March 2026 (12 months total)
+    // Current data: April to October 2025 (7 months)
     const monthsElapsed = item.monthsElapsed || 7;
-    const monthsRemaining = item.monthsRemaining || 5; // Nov, Dec, Jan, Feb, Mar
+    const monthsRemaining = item.monthsRemaining || 5;
+    const totalMonths = monthsElapsed + monthsRemaining; // 12 months
     
+    // Monthly average based on actual spending so far
     const monthlyAvg = monthsElapsed > 0 ? item.actual / monthsElapsed : 0;
+    
+    // Simple linear projection: assumes same spending rate continues
     const projected = item.actual + (monthlyAvg * monthsRemaining);
     const projectedUtilization = item.budget > 0 ? (projected / item.budget) * 100 : 0;
     
-    return { projected, projectedUtilization, monthlyAvg };
+    // Run rate: what % of budget should be used by now (proportional to time elapsed)
+    const expectedUtilizationByNow = (monthsElapsed / totalMonths) * 100; // Should be ~58.3% (7/12)
+    const runRate = item.utilization - expectedUtilizationByNow; // Positive = ahead of schedule
+    
+    return { projected, projectedUtilization, monthlyAvg, runRate, expectedUtilizationByNow };
   };
 
   const projections = getProjections(currentItem);
@@ -198,22 +206,34 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
               </ResponsiveContainer>
             </div>
 
-            {/* Projection Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-muted/30 rounded">
-                <p className="text-muted-foreground mb-1">Data Period</p>
-                <p className="font-medium">Apr - Oct 2025</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{currentItem.monthsElapsed || 7} months elapsed</p>
-              </div>
-              <div className="p-3 bg-muted/30 rounded">
-                <p className="text-muted-foreground mb-1">Monthly Average</p>
-                <p className="font-medium">{formatCurrency(projections.monthlyAvg)}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Based on actual spending</p>
-              </div>
-              <div className="p-3 bg-muted/30 rounded">
-                <p className="text-muted-foreground mb-1">Remaining Period</p>
-                <p className="font-medium">Nov - Mar 2026</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{currentItem.monthsRemaining || 5} months to go</p>
+            {/* Pacing Analysis */}
+            <div className="p-4 bg-muted/20 rounded-lg border">
+              <p className="text-xs font-medium mb-3">Spending Pace Analysis:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <p className="text-muted-foreground mb-1">Time Elapsed</p>
+                  <p className="font-medium">{currentItem.monthsElapsed || 7} / 12 months</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {projections.expectedUtilizationByNow.toFixed(1)}% of year
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Budget Used</p>
+                  <p className="font-medium">{currentItem.utilization.toFixed(1)}%</p>
+                  <p className={`text-[10px] mt-0.5 ${
+                    projections.runRate > 5 ? 'text-warning' : 
+                    projections.runRate < -5 ? 'text-success' : 'text-muted-foreground'
+                  }`}>
+                    {projections.runRate > 0 ? '+' : ''}{projections.runRate.toFixed(1)}% vs expected pace
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Monthly Average</p>
+                  <p className="font-medium">{formatCurrency(projections.monthlyAvg)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {((projections.monthlyAvg / currentItem.budget) * 100).toFixed(1)}% of budget/month
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -245,59 +265,79 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
             </div>
 
             {/* Projection Calculation */}
-            <div className="p-4 bg-warning/10 rounded-lg space-y-3 border border-warning/30">
-              <p className="text-xs font-medium">Projected by March 2026:</p>
+            <div className={`p-4 rounded-lg space-y-3 border ${
+              projections.projected > currentItem.budget 
+                ? 'bg-warning/10 border-warning/30' 
+                : 'bg-success/10 border-success/30'
+            }`}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-medium">Linear Projection (if current rate continues):</p>
+                <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+                  Assumes constant spending rate
+                </span>
+              </div>
               
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center pb-2 border-b border-warning/20">
-                  <span className="text-muted-foreground">Projected Total Spend</span>
+                <div className="flex justify-between items-center pb-2 border-b border-border/20">
+                  <span className="text-muted-foreground">Spent (7 months)</span>
+                  <span className="font-semibold">{formatCurrency(currentItem.actual)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center pb-2 border-b border-border/20">
+                  <span className="text-muted-foreground">Projected Additional (5 months)</span>
+                  <span className="font-semibold">{formatCurrency(projections.monthlyAvg * (currentItem.monthsRemaining || 5))}</span>
+                </div>
+                
+                <div className="flex justify-between items-center pb-2 border-b border-border/20">
+                  <span className="text-muted-foreground">Projected Total by March</span>
                   <span className="font-semibold">{formatCurrency(projections.projected)}</span>
                 </div>
                 
-                <div className="flex justify-between items-center pb-2 border-b border-warning/20">
-                  <span className="text-muted-foreground">Projected vs Budget</span>
-                  <span className={`font-semibold ${
+                <div className="flex justify-between items-center pb-2 border-b border-border/20">
+                  <span className="text-muted-foreground">Annual Budget</span>
+                  <span className="font-semibold">{formatCurrency(currentItem.budget)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-muted-foreground font-medium">
+                    Projected vs Budget
+                  </span>
+                  <span className={`font-bold text-base ${
                     currentItem.budget - projections.projected >= 0 ? 'text-success' : 'text-destructive'
                   }`}>
                     {currentItem.budget - projections.projected >= 0 ? '+' : ''}
                     {formatCurrency(currentItem.budget - projections.projected)}
                   </span>
                 </div>
-                
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-muted-foreground">
-                    Projected Utilization
-                  </span>
-                  <span className={`font-bold text-base ${
-                    projections.projectedUtilization > 100 ? 'text-destructive' : 
-                    projections.projectedUtilization > 80 ? 'text-warning' : 'text-success'
-                  }`}>
-                    {projections.projectedUtilization.toFixed(1)}%
-                  </span>
-                </div>
               </div>
               
               {/* Projection Formula */}
-              <div className="pt-3 mt-3 border-t border-warning/20 text-xs font-mono bg-muted/40 p-3 rounded">
-                <p className="text-muted-foreground mb-1">Projection Formula:</p>
-                <p className="mb-2">
-                  Monthly Avg = {formatCurrency(currentItem.actual)} ÷ 7 months = {formatCurrency(projections.monthlyAvg)}
-                </p>
-                <p>
-                  Projected = {formatCurrency(currentItem.actual)} + ({formatCurrency(projections.monthlyAvg)} × 5 months) = {formatCurrency(projections.projected)}
+              <div className="pt-3 mt-3 border-t border-border/20 text-xs font-mono bg-muted/40 p-3 rounded space-y-1">
+                <p className="text-muted-foreground mb-2">Calculation:</p>
+                <p>Monthly Average = {formatCurrency(currentItem.actual)} ÷ 7 = {formatCurrency(projections.monthlyAvg)}</p>
+                <p>Next 5 months = {formatCurrency(projections.monthlyAvg)} × 5 = {formatCurrency(projections.monthlyAvg * 5)}</p>
+                <p className="pt-1 border-t border-border/20 mt-1">
+                  Projected Total = {formatCurrency(currentItem.actual)} + {formatCurrency(projections.monthlyAvg * 5)} = {formatCurrency(projections.projected)}
                 </p>
               </div>
             </div>
 
             {/* Status Indicator */}
-            <div className={`p-3 rounded text-center text-sm font-medium ${
+            <div className={`p-4 rounded-lg text-sm ${
               projections.projected <= currentItem.budget 
-                ? 'bg-success/10 text-success' 
-                : 'bg-destructive/10 text-destructive'
+                ? 'bg-success/10 text-success border border-success/30' 
+                : 'bg-destructive/10 text-destructive border border-destructive/30'
             }`}>
-              {projections.projected <= currentItem.budget 
-                ? `✓ Projected to stay within budget - ${formatCurrency(currentItem.budget - projections.projected)} buffer expected` 
-                : `⚠ Warning: Projected to exceed budget by ${formatCurrency(Math.abs(currentItem.budget - projections.projected))} if current spending continues`}
+              <div className="font-medium mb-2">
+                {projections.projected <= currentItem.budget 
+                  ? '✓ On Track' 
+                  : '⚠ At Risk'}
+              </div>
+              <div className="text-xs leading-relaxed">
+                {projections.projected <= currentItem.budget 
+                  ? `Based on current spending rate of ${formatCurrency(projections.monthlyAvg)}/month, you're projected to finish ${formatCurrency(currentItem.budget - projections.projected)} under budget. You're using ${currentItem.utilization.toFixed(1)}% of budget in ${projections.expectedUtilizationByNow.toFixed(1)}% of the year.` 
+                  : `At current rate (${formatCurrency(projections.monthlyAvg)}/month), spending may exceed budget by ${formatCurrency(Math.abs(currentItem.budget - projections.projected))} by March 2026. You've used ${currentItem.utilization.toFixed(1)}% of budget with only ${projections.expectedUtilizationByNow.toFixed(1)}% of the year elapsed. Consider reducing monthly spending to ~${formatCurrency(currentItem.budget / 12)} to stay within budget.`}
+              </div>
             </div>
           </div>
         ) : (
