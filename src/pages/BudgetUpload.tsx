@@ -8,17 +8,20 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, FileSpreadsheet, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-interface BudgetRow {
+interface BudgetMasterRow {
+  serial_no: number;
+  item_name: string;
   category: string;
-  allocated_amount: number;
-  description?: string;
+  committee: string;
+  annual_budget: number;
+  monthly_budget: number;
 }
 
 export default function BudgetUpload() {
   const [file, setFile] = useState<File | null>(null);
-  const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
+  const [fiscalYear, setFiscalYear] = useState<string>('FY25-26');
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<BudgetRow[]>([]);
+  const [preview, setPreview] = useState<BudgetMasterRow[]>([]);
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,38 +37,83 @@ export default function BudgetUpload() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      // Look for "Summary-FOR WHOLE YEAR" sheet or use first sheet
+      // Look for "Summary-FOR WHOLE YEAR" sheet
       let sheetName = workbook.SheetNames.find(name => 
-        name.toLowerCase().includes('summary') || 
+        name.toLowerCase().includes('summary') && 
         name.toLowerCase().includes('whole year')
       ) || workbook.SheetNames[0];
       
       const worksheet = workbook.Sheets[sheetName];
+      
+      // Get all data without skipping rows first, to find the header row
+      const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      
+      // Find the header row (looking for "SL.NO", "ITEM", "CATEGORY", "COMMITTEE")
+      let headerRowIndex = -1;
+      for (let i = 0; i < allData.length; i++) {
+        const row = allData[i] as any[];
+        if (row[0] === 'SL.NO' || row[1] === 'ITEM') {
+          headerRowIndex = i;
+          break;
+        }
+      }
+      
+      if (headerRowIndex === -1) {
+        throw new Error('Could not find header row with SL.NO, ITEM, CATEGORY columns');
+      }
+      
+      // Parse data starting after the header row
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-        range: 7, // Start from row 8 (0-indexed, so row 7) to skip headers
+        range: headerRowIndex + 1,
         defval: '' 
       });
 
-      // Map to budget rows - handle your Excel structure
-      const budgetRows: BudgetRow[] = jsonData.map((row: any) => {
-        // Extract amount from formatted currency string like "₹ 82,330,312"
-        const amountStr = String(row['AMOUNT WITH TAX'] || row['5'] || '');
-        const amount = parseFloat(amountStr.replace(/[₹,\s]/g, '')) || 0;
-        
-        return {
-          category: row.ITEM || row['2'] || '',
-          allocated_amount: amount,
-          description: row.CATEGORY || row['3'] || '',
-        };
-      });
+      // Helper function to clean currency values
+      const cleanCurrency = (value: any): number => {
+        if (!value) return 0;
+        const str = String(value).replace(/[₹,\s]/g, '');
+        return parseFloat(str) || 0;
+      };
 
-      setPreview(budgetRows.filter(row => row.category && row.allocated_amount > 0));
+      // Map to budget master rows
+      const budgetRows: BudgetMasterRow[] = jsonData
+        .map((row: any) => {
+          // Get serial number - could be in SL.NO or column 1
+          const serialNo = parseInt(String(row['SL.NO'] || row['1'] || '0'));
+          
+          // Skip if serial number is invalid or this is a total row
+          const itemName = String(row['ITEM'] || row['2'] || '').trim();
+          if (!serialNo || serialNo === 0 || !itemName) return null;
+          if (itemName.toLowerCase().includes('total') || 
+              itemName.toLowerCase().includes('per annum')) return null;
+          
+          // Extract annual and monthly budgets (columns 5 and 6)
+          const annualBudget = cleanCurrency(row['AMOUNT WITH TAX'] || row['5']);
+          const monthlyBudget = cleanCurrency(row['AMOUNT WITH TAX__1'] || row['6']);
+          
+          return {
+            serial_no: serialNo,
+            item_name: itemName,
+            category: String(row['CATEGORY'] || row['3'] || '').trim(),
+            committee: String(row['COMMITTEE'] || row['4'] || '').trim(),
+            annual_budget: annualBudget,
+            monthly_budget: monthlyBudget || (annualBudget > 0 ? annualBudget / 12 : 0),
+          };
+        })
+        .filter((row): row is BudgetMasterRow => row !== null && row.annual_budget > 0);
+
+      setPreview(budgetRows);
       
-      if (budgetRows.filter(row => row.category && row.allocated_amount > 0).length === 0) {
+      if (budgetRows.length === 0) {
         toast({
           title: 'No valid data found',
-          description: 'Please ensure your Excel file has ITEM and AMOUNT WITH TAX columns',
+          description: 'Please ensure your Excel file has the correct format with SL.NO, ITEM, CATEGORY, COMMITTEE, and AMOUNT WITH TAX columns',
           variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'File parsed successfully',
+          description: `Found ${budgetRows.length} budget items`,
         });
       }
     } catch (error: any) {
@@ -93,19 +141,22 @@ export default function BudgetUpload() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Insert budget items
+      // Insert budget master items
       const budgetItems = preview.map(item => ({
-        category: item.category,
-        allocated_amount: item.allocated_amount,
-        description: item.description || null,
         fiscal_year: fiscalYear,
+        serial_no: item.serial_no,
+        item_name: item.item_name,
+        category: item.category,
+        committee: item.committee,
+        annual_budget: item.annual_budget,
+        monthly_budget: item.monthly_budget,
         created_by: user.id,
       }));
 
       const { error } = await supabase
-        .from('budget_items')
+        .from('budget_master')
         .upsert(budgetItems, {
-          onConflict: 'category,fiscal_year',
+          onConflict: 'fiscal_year,serial_no',
           ignoreDuplicates: false,
         });
 
@@ -153,7 +204,7 @@ export default function BudgetUpload() {
         <CardHeader>
           <CardTitle>Budget File Upload</CardTitle>
           <CardDescription>
-            Upload a CSV or Excel file with columns: Category, Allocated Amount, Description (optional)
+            Upload the approved budget Excel file (Summary-FOR WHOLE YEAR sheet) with columns: SL.NO, ITEM, CATEGORY, COMMITTEE, AMOUNT WITH TAX
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -161,11 +212,10 @@ export default function BudgetUpload() {
             <Label htmlFor="fiscal-year">Fiscal Year</Label>
             <Input
               id="fiscal-year"
-              type="number"
+              type="text"
               value={fiscalYear}
-              onChange={(e) => setFiscalYear(parseInt(e.target.value))}
-              min={2000}
-              max={2100}
+              onChange={(e) => setFiscalYear(e.target.value)}
+              placeholder="e.g., FY25-26"
             />
           </div>
 
@@ -210,19 +260,27 @@ export default function BudgetUpload() {
                   <table className="w-full">
                     <thead className="bg-muted sticky top-0">
                       <tr>
+                        <th className="text-left p-3 font-medium">S.No</th>
+                        <th className="text-left p-3 font-medium">Item</th>
                         <th className="text-left p-3 font-medium">Category</th>
-                        <th className="text-right p-3 font-medium">Allocated Amount</th>
-                        <th className="text-left p-3 font-medium">Description</th>
+                        <th className="text-left p-3 font-medium">Committee</th>
+                        <th className="text-right p-3 font-medium">Annual Budget</th>
+                        <th className="text-right p-3 font-medium">Monthly Budget</th>
                       </tr>
                     </thead>
                     <tbody>
                       {preview.map((row, index) => (
                         <tr key={index} className="border-t hover:bg-muted/50">
-                          <td className="p-3">{row.category}</td>
+                          <td className="p-3">{row.serial_no}</td>
+                          <td className="p-3">{row.item_name}</td>
+                          <td className="p-3 text-muted-foreground">{row.category}</td>
+                          <td className="p-3 text-muted-foreground">{row.committee}</td>
                           <td className="p-3 text-right font-medium">
-                            {formatCurrency(row.allocated_amount)}
+                            {formatCurrency(row.annual_budget)}
                           </td>
-                          <td className="p-3 text-muted-foreground">{row.description || '-'}</td>
+                          <td className="p-3 text-right font-medium text-muted-foreground">
+                            {formatCurrency(row.monthly_budget)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

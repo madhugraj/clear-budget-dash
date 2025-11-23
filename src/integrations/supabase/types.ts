@@ -52,6 +52,48 @@ export type Database = {
           },
         ]
       }
+      budget_master: {
+        Row: {
+          annual_budget: number
+          category: string
+          committee: string
+          created_at: string
+          created_by: string
+          fiscal_year: string
+          id: string
+          item_name: string
+          monthly_budget: number
+          serial_no: number
+          updated_at: string
+        }
+        Insert: {
+          annual_budget: number
+          category: string
+          committee: string
+          created_at?: string
+          created_by: string
+          fiscal_year?: string
+          id?: string
+          item_name: string
+          monthly_budget?: number
+          serial_no: number
+          updated_at?: string
+        }
+        Update: {
+          annual_budget?: number
+          category?: string
+          committee?: string
+          created_at?: string
+          created_by?: string
+          fiscal_year?: string
+          id?: string
+          item_name?: string
+          monthly_budget?: number
+          serial_no?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount: number
