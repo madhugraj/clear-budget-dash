@@ -129,6 +129,11 @@ export default function Approvals() {
 
       if (error) throw error;
 
+      // Send email notification
+      supabase.functions.invoke('send-expense-notification', {
+        body: { expenseId, action: 'rejected' }
+      }).then(() => console.log('Rejection email sent')).catch(err => console.error('Email failed:', err));
+
       toast({
         title: 'Expense rejected',
         description: 'The expense has been rejected',
