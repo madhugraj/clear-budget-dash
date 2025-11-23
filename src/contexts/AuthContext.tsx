@@ -92,8 +92,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/auth');
+    try {
+      // Clear local state first
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+      
+      // Attempt to sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Sign out error:', error);
+        // Still navigate even if there's an error since we cleared local state
+      }
+      
+      // Always navigate to auth page after clearing state
+      navigate('/auth');
+    } catch (error) {
+      console.error('Unexpected sign out error:', error);
+      // Navigate anyway since we've cleared the local state
+      navigate('/auth');
+    }
   };
 
   return (
