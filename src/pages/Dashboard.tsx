@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +11,7 @@ import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 import { BudgetMeter } from '@/components/BudgetMeter';
 import { OverBudgetAlert } from '@/components/OverBudgetAlert';
 import { RoleBadge } from '@/components/RoleBadge';
+import { RefreshCw } from 'lucide-react';
 
 interface DashboardStats {
   totalBudget: number;
@@ -42,12 +44,19 @@ export default function Dashboard() {
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [allCommittees, setAllCommittees] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartKey, setChartKey] = useState(0);
   const { toast } = useToast();
   const { userRole, user } = useAuth();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  const refreshCharts = () => {
+    setChartKey(prev => prev + 1);
+    setLoading(true);
+    loadDashboardData();
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -368,26 +377,41 @@ export default function Dashboard() {
       </div>
 
       {/* Expense Visualizations */}
-      <div className="grid gap-6 lg:grid-cols-2 animate-[fade-in_0.6s_ease-out_0.5s_both]">
-        <div className="w-full overflow-hidden">
-          <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
-            <CardContent className="p-0">
-              <MonthlyExpenseChart data={monthlyData} />
-            </CardContent>
-          </Card>
+      <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
+        <div className="flex justify-end">
+          <Button 
+            onClick={refreshCharts} 
+            variant="outline" 
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh Charts
+          </Button>
         </div>
-        <div className="w-full overflow-hidden">
-          <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
-            <CardContent className="p-0">
-              <ItemWiseExpenseChart 
-                data={itemData} 
-                allCategories={allCategories}
-                allCommittees={allCommittees}
-                onCategoryChange={handleCategoryFilter}
-                onCommitteeChange={handleCommitteeFilter}
-              />
-            </CardContent>
-          </Card>
+        
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="w-full overflow-hidden">
+            <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
+              <CardContent className="p-0">
+                <MonthlyExpenseChart key={`monthly-${chartKey}`} data={monthlyData} />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="w-full overflow-hidden">
+            <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
+              <CardContent className="p-0">
+                <ItemWiseExpenseChart 
+                  key={`item-${chartKey}`}
+                  data={itemData} 
+                  allCategories={allCategories}
+                  allCommittees={allCommittees}
+                  onCategoryChange={handleCategoryFilter}
+                  onCommitteeChange={handleCommitteeFilter}
+                />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 

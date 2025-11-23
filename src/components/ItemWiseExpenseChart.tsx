@@ -160,14 +160,15 @@ export function ItemWiseExpenseChart({
                   axisLine={false}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar 
-                  dataKey="amount" 
-                  radius={[0, 4, 4, 0]}
-                  barSize={28}
-                  animationBegin={0}
-                  animationDuration={1000}
-                  animationEasing="ease-out"
-                >
+            <Bar 
+              dataKey="amount" 
+              radius={[0, 4, 4, 0]}
+              barSize={28}
+              isAnimationActive={true}
+              animationBegin={0}
+              animationDuration={1800}
+              animationEasing="ease-out"
+            >
                   {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={getBarColor(entry.utilization)} />
                   ))}
