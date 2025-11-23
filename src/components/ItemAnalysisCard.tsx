@@ -67,10 +67,10 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
   const currentItem = filteredItems.find(item => item.item_name === selectedItem);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Item-wise Budget Analysis</CardTitle>
-        <CardDescription>Select filters and an item to view detailed Budget vs Actual comparison</CardDescription>
+    <Card className="border-none shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base font-normal">Item-wise Budget Analysis</CardTitle>
+        <CardDescription className="text-xs">Select filters and item to view details</CardDescription>
         
         {/* Filter Controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">

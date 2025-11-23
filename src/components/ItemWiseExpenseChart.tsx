@@ -63,12 +63,12 @@ export function ItemWiseExpenseChart({
   };
 
   return (
-    <Card>
+    <Card className="border-none shadow-none">
       <CardHeader>
         <div className="flex flex-col gap-4">
           <div>
-            <CardTitle>Top 10 Items by Spending</CardTitle>
-            <CardDescription>Budget utilization by item (showing highest spenders)</CardDescription>
+            <CardTitle className="text-base font-normal">Top 10 Items by Spending</CardTitle>
+            <CardDescription className="text-xs">Budget utilization by item</CardDescription>
           </div>
           <div className="flex gap-3 flex-wrap">
             <Select value={selectedCategory} onValueChange={handleCategoryChange}>
@@ -96,7 +96,7 @@ export function ItemWiseExpenseChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-2">
         <ResponsiveContainer width="100%" height={600}>
           <BarChart 
             data={data} 

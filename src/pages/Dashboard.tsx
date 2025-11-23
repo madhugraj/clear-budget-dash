@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, TrendingUp, Wallet, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
 import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
+import { BudgetMeter } from '@/components/BudgetMeter';
 
 interface DashboardStats {
   totalBudget: number;
@@ -217,89 +217,102 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-4 w-24" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-32" />
-              </CardContent>
-            </Card>
-          ))}
+      <div className="space-y-8 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
+        </div>
+        <div className="grid gap-6">
+          <Skeleton className="h-[400px]" />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-[400px]" />
+            <Skeleton className="h-[400px]" />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
+    <div className="space-y-8 animate-fade-in">
+      {/* Minimal Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
+        <div className="text-sm text-muted-foreground">
+          FY 2025-26
+        </div>
+      </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+      {/* Budget Meter - Hero Section */}
+      <BudgetMeter 
+        budget={stats?.totalBudget || 0} 
+        spent={stats?.totalExpenses || 0}
+      />
+
+      {/* Minimal Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="border-none shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-normal text-muted-foreground">
               Total Budget
             </CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.totalBudget || 0)}</div>
+            <div className="text-xl font-semibold">{formatCurrency(stats?.totalBudget || 0)}</div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+        <Card className="border-none shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-normal text-muted-foreground">
               Total Expenses
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.totalExpenses || 0)}</div>
+            <div className="text-xl font-semibold">{formatCurrency(stats?.totalExpenses || 0)}</div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+        <Card className="border-none shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-normal text-muted-foreground">
               Balance
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.balance || 0)}</div>
+            <div className="text-xl font-semibold">{formatCurrency(stats?.balance || 0)}</div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+        <Card className="border-none shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-normal text-muted-foreground">
               Pending Approvals
             </CardTitle>
-            <AlertCircle className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingApprovals || 0}</div>
+            <div className="text-xl font-semibold">{stats?.pendingApprovals || 0}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Expense Visualizations */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <MonthlyExpenseChart data={monthlyData} />
-        <ItemWiseExpenseChart 
-          data={itemData} 
-          allCategories={allCategories}
-          allCommittees={allCommittees}
-          onCategoryChange={handleCategoryFilter}
-          onCommitteeChange={handleCommitteeFilter}
-        />
+        <Card className="border-none shadow-none">
+          <CardContent className="p-0">
+            <MonthlyExpenseChart data={monthlyData} />
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-none">
+          <CardContent className="p-0">
+            <ItemWiseExpenseChart 
+              data={itemData} 
+              allCategories={allCategories}
+              allCommittees={allCommittees}
+              onCategoryChange={handleCategoryFilter}
+              onCommitteeChange={handleCommitteeFilter}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {/* Item-wise Budget Analysis */}
