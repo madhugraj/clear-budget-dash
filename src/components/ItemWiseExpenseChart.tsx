@@ -106,20 +106,12 @@ export function ItemWiseExpenseChart({
 
   return (
     <Card className="border-none shadow-none">
-      <CardHeader className="space-y-4">
-        <div>
-          <CardTitle className="text-base font-normal">Top 10 Items by Spending</CardTitle>
-          <CardDescription className="text-xs mt-1">
-            Shows the highest spending items with their budget utilization. Colors indicate: 
-            <span className="text-success"> Green (&lt;80%)</span>, 
-            <span className="text-warning"> Yellow (80-100%)</span>, 
-            <span className="text-destructive"> Red (&gt;100%)</span>
-          </CardDescription>
-        </div>
-        <div className="flex gap-3 flex-wrap">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-normal">Top 10 Items by Spending</CardTitle>
+        <div className="flex gap-2 flex-wrap mt-3">
           <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Filter by Category" />
+            <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
+              <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
@@ -129,8 +121,8 @@ export function ItemWiseExpenseChart({
             </SelectContent>
           </Select>
           <Select value={selectedCommittee} onValueChange={handleCommitteeChange}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Filter by Committee" />
+            <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
+              <SelectValue placeholder="Committee" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Committees</SelectItem>
@@ -141,36 +133,37 @@ export function ItemWiseExpenseChart({
           </Select>
         </div>
       </CardHeader>
-      <CardContent className="px-2">
+      <CardContent className="px-2 pb-2">
         <div className="w-full overflow-x-auto">
-          <div className="min-w-[600px]">
-            <ResponsiveContainer width="100%" height={600}>
+          <div className="min-w-[500px]">
+            <ResponsiveContainer width="100%" height={500}>
               <BarChart 
                 data={data} 
                 layout="vertical"
-                margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
+                margin={{ left: 10, right: 10, top: 5, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                 <XAxis 
                   type="number"
                   tickFormatter={formatCompactCurrency}
                   className="text-xs"
                   tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  axisLine={false}
                 />
                 <YAxis 
                   type="category"
                   dataKey="item_name" 
-                  width={140}
+                  width={120}
                   className="text-xs"
                   tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   interval={0}
+                  axisLine={false}
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar 
                   dataKey="amount" 
-                  name="Spent"
-                  radius={[0, 6, 6, 0]}
-                  barSize={35}
+                  radius={[0, 4, 4, 0]}
+                  barSize={28}
                 >
                   {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={getBarColor(entry.utilization)} />
@@ -180,21 +173,18 @@ export function ItemWiseExpenseChart({
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-          <p className="text-xs font-medium mb-3">Budget Utilization Legend:</p>
-          <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-success"></div>
-              <span className="text-muted-foreground">&lt;80% - Healthy</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-warning"></div>
-              <span className="text-muted-foreground">80-100% - Near Limit</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-destructive"></div>
-              <span className="text-muted-foreground">&gt;100% - Over Budget</span>
-            </div>
+        <div className="mt-3 flex items-center justify-center gap-4 text-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm bg-success"></div>
+            <span className="text-muted-foreground">&lt;80%</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm bg-warning"></div>
+            <span className="text-muted-foreground">80-100%</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm bg-destructive"></div>
+            <span className="text-muted-foreground">&gt;100%</span>
           </div>
         </div>
       </CardContent>
