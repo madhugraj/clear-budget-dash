@@ -100,7 +100,7 @@ export default function BudgetUpload() {
             monthly_budget: monthlyBudget || (annualBudget > 0 ? annualBudget / 12 : 0),
           };
         })
-        .filter((row): row is BudgetMasterRow => row !== null && row.annual_budget > 0);
+        .filter((row): row is BudgetMasterRow => row !== null);
 
       setPreview(budgetRows);
       
