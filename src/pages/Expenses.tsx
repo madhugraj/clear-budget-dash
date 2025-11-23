@@ -12,9 +12,12 @@ import * as XLSX from 'xlsx';
 
 interface BudgetItem {
   id: string;
+  item_name: string;
   category: string;
-  allocated_amount: number;
-  fiscal_year: number;
+  committee: string;
+  annual_budget: number;
+  fiscal_year: string;
+  serial_no: number;
 }
 
 interface HistoricalExpenseRow {
@@ -54,12 +57,11 @@ export default function Expenses() {
 
   const loadBudgetItems = async () => {
     try {
-      const currentYear = new Date().getFullYear();
       const { data, error } = await supabase
-        .from('budget_items')
+        .from('budget_master')
         .select('*')
-        .eq('fiscal_year', currentYear)
-        .order('category');
+        .eq('fiscal_year', 'FY25-26')
+        .order('category, item_name');
 
       if (error) throw error;
       setBudgetItems(data || []);
@@ -317,7 +319,7 @@ export default function Expenses() {
       const { error } = await supabase
         .from('expenses')
         .insert({
-          budget_item_id: selectedBudgetItem,
+          budget_master_id: selectedBudgetItem,
           amount: parseFloat(amount),
           description,
           expense_date: expenseDate,
@@ -508,19 +510,27 @@ export default function Expenses() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="budget-category">Budget Category</Label>
+              <Label htmlFor="budget-item">Budget Item</Label>
               <Select value={selectedBudgetItem} onValueChange={setSelectedBudgetItem} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
+                  <SelectValue placeholder="Select a budget item" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   {budgetItems.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
-                      {item.category} - ₹{item.allocated_amount.toLocaleString()}
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{item.item_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.category} • {item.committee} • ₹{item.annual_budget.toLocaleString()}
+                        </span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Select the budget item this expense belongs to
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -560,21 +570,28 @@ export default function Expenses() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="invoice-upload">Invoice/Bill (Optional)</Label>
-              <div className="flex items-center gap-4">
-                <Input
-                  id="invoice-upload"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={handleInvoiceChange}
-                  className="cursor-pointer"
-                />
-                {invoice && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    <span>{invoice.name}</span>
-                  </div>
-                )}
+              <Label htmlFor="invoice-upload">
+                Invoice/Bill <span className="text-xs text-muted-foreground">(Recommended)</span>
+              </Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-4">
+                  <Input
+                    id="invoice-upload"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={handleInvoiceChange}
+                    className="cursor-pointer"
+                  />
+                  {invoice && (
+                    <div className="flex items-center gap-2 text-sm text-success">
+                      <FileText className="h-4 w-4" />
+                      <span>{invoice.name}</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Upload supporting documents (PDF, JPG, PNG). Files are stored securely.
+                </p>
               </div>
             </div>
 
