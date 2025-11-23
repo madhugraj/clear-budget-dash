@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -52,6 +52,15 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            className="w-fit mb-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
           <CardTitle className="text-2xl font-bold text-center">Admin Login</CardTitle>
           <CardDescription className="text-center">
             Sign in to manage budgets and expenses
