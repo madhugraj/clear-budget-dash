@@ -33,18 +33,41 @@ export default function BudgetUpload() {
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
+      
+      // Look for "Summary-FOR WHOLE YEAR" sheet or use first sheet
+      let sheetName = workbook.SheetNames.find(name => 
+        name.toLowerCase().includes('summary') || 
+        name.toLowerCase().includes('whole year')
+      ) || workbook.SheetNames[0];
+      
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+        range: 7, // Start from row 8 (0-indexed, so row 7) to skip headers
+        defval: '' 
+      });
 
-      // Map to budget rows
-      const budgetRows: BudgetRow[] = jsonData.map((row: any) => ({
-        category: row.Category || row.category || '',
-        allocated_amount: parseFloat(row['Allocated Amount'] || row.allocated_amount || 0),
-        description: row.Description || row.description || '',
-      }));
+      // Map to budget rows - handle your Excel structure
+      const budgetRows: BudgetRow[] = jsonData.map((row: any) => {
+        // Extract amount from formatted currency string like "₹ 82,330,312"
+        const amountStr = String(row['AMOUNT WITH TAX'] || row['5'] || '');
+        const amount = parseFloat(amountStr.replace(/[₹,\s]/g, '')) || 0;
+        
+        return {
+          category: row.ITEM || row['2'] || '',
+          allocated_amount: amount,
+          description: row.CATEGORY || row['3'] || '',
+        };
+      });
 
       setPreview(budgetRows.filter(row => row.category && row.allocated_amount > 0));
+      
+      if (budgetRows.filter(row => row.category && row.allocated_amount > 0).length === 0) {
+        toast({
+          title: 'No valid data found',
+          description: 'Please ensure your Excel file has ITEM and AMOUNT WITH TAX columns',
+          variant: 'destructive',
+        });
+      }
     } catch (error: any) {
       toast({
         title: 'Error parsing file',
