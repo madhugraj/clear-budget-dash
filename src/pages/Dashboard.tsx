@@ -253,7 +253,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground whitespace-nowrap">
           Fiscal Year 2025-26
         </div>
       </div>

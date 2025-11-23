@@ -12,6 +12,7 @@ import {
   CheckCircle,
   UserCog,
   LogIn,
+  FileBarChart,
 } from 'lucide-react';
 import {
   Sheet,
@@ -26,6 +27,7 @@ const navigation = [
   { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
   { name: 'User Management', href: '/user-management', icon: UserCog, roles: ['treasurer'] },
+  { name: 'Reports', href: '/reports', icon: FileBarChart, roles: ['treasurer', 'accountant'] },
   { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
 ];
 
@@ -124,7 +126,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={() => navigate('/auth')}
-              className="hover:bg-muted"
+              className="hover:bg-muted border border-border"
             >
               <LogIn className="mr-2 h-4 w-4" />
               Login

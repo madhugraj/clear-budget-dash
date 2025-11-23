@@ -13,6 +13,7 @@ import Expenses from "./pages/Expenses";
 import Approvals from "./pages/Approvals";
 import Historical from "./pages/Historical";
 import UserManagement from "./pages/UserManagement";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -78,6 +79,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <UserManagement />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Reports />
                   </AppLayout>
                 </ProtectedRoute>
               }
