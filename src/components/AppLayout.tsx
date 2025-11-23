@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
@@ -10,6 +10,8 @@ import {
   LogOut,
   Menu,
   CheckCircle,
+  UserCog,
+  LogIn,
 } from 'lucide-react';
 import {
   Sheet,
@@ -23,12 +25,14 @@ const navigation = [
   { name: 'Upload Budget', href: '/budget-upload', icon: Upload, roles: ['treasurer'] },
   { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
+  { name: 'User Management', href: '/user-management', icon: UserCog, roles: ['treasurer'] },
   { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { signOut, userRole } = useAuth();
+  const { signOut, userRole, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   
   // Filter navigation based on user role
   const filteredNavigation = navigation.filter(item => 
@@ -62,8 +66,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* Mobile Header */}
       <header className="lg:hidden sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-4">
-          <Sheet>
+        <div className="flex h-16 items-center px-4 justify-between">
+          {user && (
+            <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="mr-2">
                 <Menu className="h-6 w-6" />
@@ -95,14 +100,39 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             </SheetContent>
           </Sheet>
+          )}
           <h1 className="text-lg font-semibold">Expense Manager</h1>
+          {!user && (
+            <Button 
+              variant="default" 
+              size="sm"
+              onClick={() => navigate('/auth')}
+            >
+              <LogIn className="mr-2 h-4 w-4" />
+              Login
+            </Button>
+          )}
         </div>
       </header>
 
       {/* Desktop Layout */}
       <div className="lg:flex">
+        {/* Login Button for Desktop (when not logged in) */}
+        {!user && (
+          <div className="hidden lg:block fixed top-4 left-4 z-50">
+            <Button 
+              variant="default"
+              onClick={() => navigate('/auth')}
+            >
+              <LogIn className="mr-2 h-4 w-4" />
+              Login
+            </Button>
+          </div>
+        )}
+        
         {/* Sidebar */}
-        <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
+        {user && (
+          <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
           <div className="flex flex-col h-full">
             <div className="p-6 border-b">
               <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
@@ -125,11 +155,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Sign Out
               </Button>
             </div>
-          </div>
-        </aside>
+            </div>
+          </aside>
+        )}
 
         {/* Main Content */}
-        <main className="lg:pl-64 flex-1">
+        <main className={cn("flex-1", user && "lg:pl-64")}>
           <div className="p-6 lg:p-8">
             {children}
           </div>

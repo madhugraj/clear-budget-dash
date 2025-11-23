@@ -12,6 +12,7 @@ import BudgetUpload from "./pages/BudgetUpload";
 import Expenses from "./pages/Expenses";
 import Approvals from "./pages/Approvals";
 import Historical from "./pages/Historical";
+import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,16 +25,21 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
+            <Route
+              path="/"
+              element={
+                <AppLayout>
+                  <Dashboard />
+                </AppLayout>
+              }
+            />
             <Route
               path="/dashboard"
               element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Dashboard />
-                  </AppLayout>
-                </ProtectedRoute>
+                <AppLayout>
+                  <Dashboard />
+                </AppLayout>
               }
             />
             <Route
@@ -62,6 +68,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <Approvals />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/user-management"
+              element={
+                <ProtectedRoute requiredRole="treasurer">
+                  <AppLayout>
+                    <UserManagement />
                   </AppLayout>
                 </ProtectedRoute>
               }
