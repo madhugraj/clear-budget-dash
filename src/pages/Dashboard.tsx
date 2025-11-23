@@ -351,6 +351,8 @@ export default function Dashboard() {
             utilization: item.utilization,
             category: item.category,
             committee: item.committee,
+            monthsElapsed: 7, // Apr - Oct 2025
+            monthsRemaining: 5, // Nov - Mar 2026
           }))} 
         />
       </div>
