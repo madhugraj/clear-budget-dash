@@ -189,7 +189,7 @@ export default function Dashboard() {
         .sort((a, b) => b.amount - a.amount);
 
       setAllItemData(allItemChartData);
-      setItemData(allItemChartData.slice(0, 10));
+      setItemData(allItemChartData.slice(0, 5));
       setAllCategories(Array.from(categoriesSet).sort());
       setAllCommittees(Array.from(committeesSet).sort());
     } catch (error: any) {
@@ -216,7 +216,7 @@ export default function Dashboard() {
     if (category !== 'all') {
       filtered = filtered.filter(item => item.category === category);
     }
-    setItemData(filtered.slice(0, 10));
+    setItemData(filtered.slice(0, 5));
   };
 
   const handleCommitteeFilter = (committee: string) => {
@@ -224,7 +224,7 @@ export default function Dashboard() {
     if (committee !== 'all') {
       filtered = filtered.filter(item => item.committee === committee);
     }
-    setItemData(filtered.slice(0, 10));
+    setItemData(filtered.slice(0, 5));
   };
 
 

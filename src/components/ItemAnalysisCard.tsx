@@ -159,43 +159,43 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
               </div>
             </div>
 
-            {/* Visual Graph */}
-            <div className="h-[240px] w-full">
+            {/* Visual Graph - Simplified */}
+            <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={[
                     { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
-                    { name: 'Spent (Oct)', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
-                    { name: 'Projected (Mar)', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
+                    { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                    { name: 'Projected', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
                   ]}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 30 }}
+                  margin={{ top: 5, right: 5, left: 5, bottom: 20 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
-                    axisLine={{ stroke: 'hsl(var(--border))' }}
-                    angle={-15}
-                    textAnchor="end"
-                    height={60}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <YAxis 
-                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
-                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
                     tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
                   />
                   <Tooltip 
                     formatter={(value: number) => formatCurrency(value)}
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
-                      borderRadius: '6px',
-                      fontSize: '12px'
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      padding: '6px'
                     }}
                   />
                   <Bar 
                     dataKey="value" 
-                    radius={[6, 6, 0, 0]}
+                    radius={[4, 4, 0, 0]}
                     isAnimationActive={true}
                     animationBegin={200}
                     animationDuration={1600}
@@ -203,8 +203,8 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                   >
                     {[
                       { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
-                      { name: 'Spent (Oct)', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
-                      { name: 'Projected (Mar)', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
+                      { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                      { name: 'Projected', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
                     ].map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
