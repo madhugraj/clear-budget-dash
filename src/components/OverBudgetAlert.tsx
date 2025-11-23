@@ -1,6 +1,7 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState } from 'react';
 
 interface OverBudgetItem {
   item_name: string;
@@ -17,6 +18,8 @@ interface OverBudgetAlertProps {
 }
 
 export function OverBudgetAlert({ items }: OverBudgetAlertProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -29,58 +32,68 @@ export function OverBudgetAlert({ items }: OverBudgetAlertProps) {
     return null;
   }
 
+  const totalOverAmount = items.reduce((sum, item) => sum + item.overAmount, 0);
+
   return (
-    <Card className="border-destructive/50 bg-destructive/5">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-destructive" />
-          <CardTitle className="text-base font-semibold text-destructive">
-            Over Budget Items
-          </CardTitle>
-        </div>
-        <CardDescription className="text-xs">
-          {items.length} item{items.length > 1 ? 's have' : ' has'} exceeded the budgeted amount
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {items.map((item, index) => (
-            <div 
-              key={index} 
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-background rounded-lg border border-destructive/20"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{item.item_name}</p>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  <Badge variant="outline" className="text-xs">
-                    {item.category}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {item.committee}
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex flex-col sm:items-end gap-1 shrink-0">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Budget:</span>
-                  <span className="font-medium">{formatCurrency(item.budget)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Spent:</span>
-                  <span className="font-semibold text-destructive">{formatCurrency(item.actual)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-destructive">
-                  <span>Over by:</span>
-                  <span>{formatCurrency(item.overAmount)}</span>
-                </div>
-                <Badge variant="destructive" className="text-xs mt-1">
-                  {item.utilization.toFixed(1)}% utilized
-                </Badge>
-              </div>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="border border-destructive/50 bg-destructive/5 rounded-lg">
+        <CollapsibleTrigger className="w-full p-4 flex items-center justify-between gap-3 hover:bg-destructive/10 transition-colors">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            <div className="text-left min-w-0">
+              <p className="text-sm font-semibold text-destructive">
+                {items.length} Item{items.length > 1 ? 's' : ''} Over Budget
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Total excess: {formatCurrency(totalOverAmount)}
+              </p>
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="destructive" className="text-xs">
+              Action Required
+            </Badge>
+            <ChevronDown className={`h-4 w-4 text-destructive transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-2">
+            {items.map((item, index) => (
+              <div 
+                key={index} 
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-background rounded border border-destructive/20"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{item.item_name}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {item.category}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {item.committee}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs shrink-0">
+                  <div className="text-right">
+                    <div className="text-muted-foreground">Budget</div>
+                    <div className="font-medium">{formatCurrency(item.budget)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-muted-foreground">Spent</div>
+                    <div className="font-semibold text-destructive">{formatCurrency(item.actual)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-muted-foreground">Over</div>
+                    <div className="font-bold text-destructive">{formatCurrency(item.overAmount)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
