@@ -98,7 +98,8 @@ export type Database = {
         Row: {
           amount: number
           approved_by: string | null
-          budget_item_id: string
+          budget_item_id: string | null
+          budget_master_id: string | null
           claimed_by: string
           created_at: string
           description: string
@@ -111,7 +112,8 @@ export type Database = {
         Insert: {
           amount: number
           approved_by?: string | null
-          budget_item_id: string
+          budget_item_id?: string | null
+          budget_master_id?: string | null
           claimed_by: string
           created_at?: string
           description: string
@@ -124,7 +126,8 @@ export type Database = {
         Update: {
           amount?: number
           approved_by?: string | null
-          budget_item_id?: string
+          budget_item_id?: string | null
+          budget_master_id?: string | null
           claimed_by?: string
           created_at?: string
           description?: string
@@ -147,6 +150,13 @@ export type Database = {
             columns: ["budget_item_id"]
             isOneToOne: false
             referencedRelation: "budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_budget_master_id_fkey"
+            columns: ["budget_master_id"]
+            isOneToOne: false
+            referencedRelation: "budget_master"
             referencedColumns: ["id"]
           },
           {

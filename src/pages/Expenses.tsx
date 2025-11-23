@@ -234,12 +234,10 @@ export default function Expenses() {
         for (const month of months) {
           const amount = row[month.key];
           if (amount > 0) {
-            // Note: This creates expenses without budget_item_id since we don't have that table populated
-            // You may need to adjust this based on your actual schema needs
             const { error: insertError } = await supabase
               .from('expenses')
               .insert({
-                budget_item_id: budgetItem.id, // This will fail if budget_items table is empty
+                budget_master_id: budgetItem.id,
                 amount: amount,
                 description: `Historical expense for ${row.item_name} - ${month.name} 2025`,
                 expense_date: month.date,
