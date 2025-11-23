@@ -193,7 +193,14 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                       fontSize: '12px'
                     }}
                   />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  <Bar 
+                    dataKey="value" 
+                    radius={[6, 6, 0, 0]}
+                    isAnimationActive={true}
+                    animationBegin={200}
+                    animationDuration={1600}
+                    animationEasing="ease-out"
+                  >
                     {[
                       { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
                       { name: 'Spent (Oct)', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
