@@ -121,12 +121,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="lg:flex">
         {/* Login Button for Desktop (when not logged in) */}
         {!user && (
-          <div className="hidden lg:block fixed top-6 right-6 z-50">
+          <div className="hidden lg:block fixed top-8 right-8 z-50">
             <Button 
-              variant="ghost"
-              size="sm"
+              variant="default"
+              size="default"
               onClick={() => navigate('/auth')}
-              className="hover:bg-muted border border-border"
+              className="shadow-lg hover:shadow-xl transition-all"
             >
               <LogIn className="mr-2 h-4 w-4" />
               Login

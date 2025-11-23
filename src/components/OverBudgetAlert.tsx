@@ -36,8 +36,8 @@ export function OverBudgetAlert({ items }: OverBudgetAlertProps) {
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="border border-destructive/50 bg-destructive/5 rounded-lg">
-        <CollapsibleTrigger className="w-full p-4 flex items-center justify-between gap-3 hover:bg-destructive/10 transition-colors">
+      <div className="border border-destructive/50 bg-destructive/5 rounded-lg shadow-lg hover:shadow-xl transition-all">
+        <CollapsibleTrigger className="w-full p-4 flex items-center justify-between gap-3 hover:bg-destructive/10 transition-colors rounded-t-lg">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
             <div className="text-left min-w-0">

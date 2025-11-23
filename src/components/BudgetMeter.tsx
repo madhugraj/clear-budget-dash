@@ -39,8 +39,8 @@ export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
   };
 
   return (
-    <Card className="border-none shadow-none">
-      <CardContent className="p-4 md:p-8">
+    <Card className="border-none shadow-lg bg-gradient-to-br from-card via-card to-muted/20">
+      <CardContent className="p-6 md:p-10">
         <div className="space-y-6 md:space-y-8">
           {/* Circular Meter */}
           <div className="flex flex-col items-center justify-center gap-4">
