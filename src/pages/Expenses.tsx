@@ -42,6 +42,8 @@ export default function Expenses() {
   const [amount, setAmount] = useState<string>('');
   const [gstPercentage, setGstPercentage] = useState<number>(18);
   const [gstAmount, setGstAmount] = useState<number>(0);
+  const [tdsPercentage, setTdsPercentage] = useState<number>(0);
+  const [tdsAmount, setTdsAmount] = useState<number>(0);
   const [description, setDescription] = useState<string>('');
   const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoice, setInvoice] = useState<File | null>(null);
@@ -59,6 +61,24 @@ export default function Expenses() {
   useEffect(() => {
     loadBudgetItems();
   }, []);
+
+  // Auto-calculate GST when amount or percentage changes
+  useEffect(() => {
+    if (amount && parseFloat(amount) > 0) {
+      const baseAmount = parseFloat(amount);
+      const gst = (baseAmount * gstPercentage) / 100;
+      setGstAmount(Math.round(gst * 100) / 100);
+    }
+  }, [amount, gstPercentage]);
+
+  // Auto-calculate TDS when amount or percentage changes
+  useEffect(() => {
+    if (amount && parseFloat(amount) > 0) {
+      const baseAmount = parseFloat(amount);
+      const tds = (baseAmount * tdsPercentage) / 100;
+      setTdsAmount(Math.round(tds * 100) / 100);
+    }
+  }, [amount, tdsPercentage]);
 
   const loadBudgetItems = async () => {
     try {
@@ -327,6 +347,8 @@ export default function Expenses() {
           budget_master_id: selectedBudgetItem,
           amount: parseFloat(amount),
           gst_amount: gstAmount,
+          tds_percentage: tdsPercentage,
+          tds_amount: tdsAmount,
           description,
           expense_date: expenseDate,
           invoice_url: invoiceUrl,
@@ -352,6 +374,8 @@ export default function Expenses() {
       setAmount('');
       setGstPercentage(18);
       setGstAmount(0);
+      setTdsPercentage(0);
+      setTdsAmount(0);
       setDescription('');
       setExpenseDate(new Date().toISOString().split('T')[0]);
       setInvoice(null);
@@ -613,15 +637,67 @@ export default function Expenses() {
               </div>
 
               <div className="space-y-2">
-                <Label>Total Amount (₹)</Label>
+                <Label htmlFor="tds-percentage">TDS %</Label>
+                <Select
+                  value={tdsPercentage.toString()}
+                  onValueChange={(value) => setTdsPercentage(parseFloat(value))}
+                >
+                  <SelectTrigger id="tds-percentage">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="1">1%</SelectItem>
+                    <SelectItem value="2">2%</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="10">10%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="tds-amount">TDS Amount (₹)</Label>
+                <Input
+                  id="tds-amount"
+                  type="number"
+                  step="0.01"
+                  value={tdsAmount}
+                  onChange={(e) => setTdsAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-calculated on Base Amount
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Gross Amount (₹)</Label>
                 <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
-                  <span className="font-semibold text-lg">
+                  <span className="font-semibold">
                     ₹{((parseFloat(amount) || 0) + gstAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Base + GST
                 </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-primary/5 border-2 border-primary/20 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-semibold">Net Payment</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Amount to be paid (Gross - TDS)
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-primary">
+                    ₹{((parseFloat(amount) || 0) + gstAmount - tdsAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -17,6 +17,8 @@ interface Expense {
   description: string;
   amount: number;
   gst_amount: number;
+  tds_percentage: number;
+  tds_amount: number;
   status: string;
   expense_date: string;
   correction_reason: string | null;
@@ -63,6 +65,8 @@ export default function Corrections() {
   const [editAmount, setEditAmount] = useState<string>('');
   const [editGstPercentage, setEditGstPercentage] = useState<number>(18);
   const [editGstAmount, setEditGstAmount] = useState<number>(0);
+  const [editTdsPercentage, setEditTdsPercentage] = useState<number>(0);
+  const [editTdsAmount, setEditTdsAmount] = useState<number>(0);
   const [editDescription, setEditDescription] = useState<string>('');
   const [editExpenseDate, setEditExpenseDate] = useState<string>('');
   const [editBudgetItem, setEditBudgetItem] = useState<string>('');
@@ -185,6 +189,8 @@ export default function Corrections() {
       setEditMode(true);
       setEditAmount(expense.amount.toString());
       setEditGstAmount(expense.gst_amount);
+      setEditTdsPercentage(expense.tds_percentage || 0);
+      setEditTdsAmount(expense.tds_amount || 0);
       setEditDescription(expense.description);
       setEditExpenseDate(expense.expense_date);
       setEditBudgetItem(expense.budget_master?.id || '');
@@ -255,6 +261,15 @@ export default function Corrections() {
       setEditGstAmount(Math.round(gst * 100) / 100);
     }
   }, [editAmount, editGstPercentage]);
+
+  // Auto-calculate TDS when amount or percentage changes
+  useEffect(() => {
+    if (editAmount && parseFloat(editAmount) > 0) {
+      const baseAmount = parseFloat(editAmount);
+      const tds = (baseAmount * editTdsPercentage) / 100;
+      setEditTdsAmount(Math.round(tds * 100) / 100);
+    }
+  }, [editAmount, editTdsPercentage]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -353,10 +368,16 @@ export default function Corrections() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount))}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Base: {formatCurrency(expense.amount)}<br />
-                      GST: {formatCurrency(expense.gst_amount)}
+                    <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount - (expense.tds_amount || 0)))}</div>
+                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                      <div>Base: {formatCurrency(expense.amount)}</div>
+                      <div>GST: {formatCurrency(expense.gst_amount)}</div>
+                      {expense.tds_amount > 0 && (
+                        <>
+                          <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
+                          <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
+                        </>
+                      )}
                     </div>
                     {getStatusBadge(expense)}
                   </div>
@@ -517,11 +538,20 @@ export default function Corrections() {
                       <p className="mt-1 font-medium">{selectedExpense.budget_master?.item_name || 'N/A'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Amount</label>
-                        <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount + selectedExpense.gst_amount))}</p>
-                        <p className="text-xs text-muted-foreground">Base: {formatCurrency(selectedExpense.amount)} + GST: {formatCurrency(selectedExpense.gst_amount)}</p>
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Amount</label>
+                      <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount + selectedExpense.gst_amount))}</p>
+                      <p className="text-xs text-muted-foreground space-y-0.5">
+                        <div>Base: {formatCurrency(selectedExpense.amount)}</div>
+                        <div>GST: {formatCurrency(selectedExpense.gst_amount)}</div>
+                        {selectedExpense.tds_amount > 0 && (
+                          <>
+                            <div>TDS: -{formatCurrency(selectedExpense.tds_amount)}</div>
+                            <div className="font-medium mt-1">Net: {formatCurrency(selectedExpense.amount + selectedExpense.gst_amount - selectedExpense.tds_amount)}</div>
+                          </>
+                        )}
+                      </p>
+                    </div>
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">Status</label>
                         <div className="mt-1">{getStatusBadge(selectedExpense)}</div>

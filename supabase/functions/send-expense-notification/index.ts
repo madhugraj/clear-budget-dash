@@ -34,6 +34,8 @@ Deno.serve(async (req) => {
         id,
         amount,
         gst_amount,
+        tds_percentage,
+        tds_amount,
         description,
         expense_date,
         status,
@@ -94,7 +96,10 @@ Deno.serve(async (req) => {
               <p style="color: #111827; font-size: 16px;">${budgetMaster?.category || 'N/A'}</p>
               
               <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Amount:</p>
-              <p style="color: #2563eb; font-size: 20px; font-weight: bold;">₹${Number(expense.amount).toLocaleString('en-IN')}</p>
+              <p style="color: #2563eb; font-size: 20px; font-weight: bold;">₹${Number(expense.amount + expense.gst_amount).toLocaleString('en-IN')}</p>
+              <p style="color: #6b7280; font-size: 12px;">Base: ₹${Number(expense.amount).toLocaleString('en-IN')} + GST: ₹${Number(expense.gst_amount).toLocaleString('en-IN')}</p>
+              ${(expense.tds_amount && expense.tds_amount > 0) ? `<p style="color: #dc2626; font-size: 12px;">TDS (${expense.tds_percentage}%): -₹${Number(expense.tds_amount).toLocaleString('en-IN')}</p>
+              <p style="color: #16a34a; font-size: 14px; font-weight: 600;">Net Payment: ₹${Number(expense.amount + expense.gst_amount - expense.tds_amount).toLocaleString('en-IN')}</p>` : ''}
               
               <p style="color: #6b7280; font-size: 12px; font-weight: 500; text-transform: uppercase;">Description:</p>
               <p style="color: #111827; font-size: 16px;">${expense.description}</p>
