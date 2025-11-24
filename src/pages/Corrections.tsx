@@ -17,8 +17,8 @@ interface Expense {
   description: string;
   amount: number;
   gst_amount: number;
-  tds_percentage?: number;
-  tds_amount?: number;
+  tds_percentage: number;
+  tds_amount: number;
   status: string;
   expense_date: string;
   correction_reason: string | null;
@@ -105,6 +105,8 @@ export default function Corrections() {
           description,
           amount,
           gst_amount,
+          tds_percentage,
+          tds_amount,
           status,
           expense_date,
           correction_reason,
@@ -372,7 +374,7 @@ export default function Corrections() {
                     <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                       <div>Base: {formatCurrency(expense.amount)}</div>
                       <div>GST: {formatCurrency(expense.gst_amount)}</div>
-                      {expense.tds_amount && expense.tds_amount > 0 && (
+                      {expense.tds_amount > 0 && (
                         <>
                           <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
                           <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
@@ -544,7 +546,7 @@ export default function Corrections() {
                       <p className="text-xs text-muted-foreground space-y-0.5">
                         <div>Base: {formatCurrency(selectedExpense.amount)}</div>
                         <div>GST: {formatCurrency(selectedExpense.gst_amount)}</div>
-                        {selectedExpense.tds_amount && selectedExpense.tds_amount > 0 && (
+                        {selectedExpense.tds_amount > 0 && (
                           <>
                             <div>TDS: -{formatCurrency(selectedExpense.tds_amount)}</div>
                             <div className="font-medium mt-1">Net: {formatCurrency(selectedExpense.amount + selectedExpense.gst_amount - selectedExpense.tds_amount)}</div>

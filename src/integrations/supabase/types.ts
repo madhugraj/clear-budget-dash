@@ -160,6 +160,8 @@ export type Database = {
           invoice_url: string | null
           is_correction: boolean | null
           status: string
+          tds_amount: number | null
+          tds_percentage: number | null
           updated_at: string
         }
         Insert: {
@@ -180,6 +182,8 @@ export type Database = {
           invoice_url?: string | null
           is_correction?: boolean | null
           status?: string
+          tds_amount?: number | null
+          tds_percentage?: number | null
           updated_at?: string
         }
         Update: {
@@ -200,6 +204,8 @@ export type Database = {
           invoice_url?: string | null
           is_correction?: boolean | null
           status?: string
+          tds_amount?: number | null
+          tds_percentage?: number | null
           updated_at?: string
         }
         Relationships: [

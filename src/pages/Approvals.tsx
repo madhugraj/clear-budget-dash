@@ -13,8 +13,8 @@ interface Expense {
   description: string;
   amount: number;
   gst_amount: number;
-  tds_percentage?: number;
-  tds_amount?: number;
+  tds_percentage: number;
+  tds_amount: number;
   status: string;
   expense_date: string;
   invoice_url: string | null;
@@ -53,6 +53,8 @@ export default function Approvals() {
           description,
           amount,
           gst_amount,
+          tds_percentage,
+          tds_amount,
           status,
           expense_date,
           invoice_url,
@@ -78,6 +80,8 @@ export default function Approvals() {
           description,
           amount,
           gst_amount,
+          tds_percentage,
+          tds_amount,
           status,
           expense_date,
           invoice_url,

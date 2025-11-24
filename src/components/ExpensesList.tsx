@@ -14,8 +14,8 @@ interface Expense {
   description: string;
   amount: number;
   gst_amount: number;
-  tds_percentage?: number;
-  tds_amount?: number;
+  tds_percentage: number;
+  tds_amount: number;
   status: string;
   expense_date: string;
   created_at: string;
@@ -50,6 +50,8 @@ export function ExpensesList() {
           description,
           amount,
           gst_amount,
+          tds_percentage,
+          tds_amount,
           status,
           expense_date,
           created_at,
@@ -149,11 +151,11 @@ export function ExpensesList() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-xl font-bold">{formatCurrency(expense.amount + expense.gst_amount - (expense.tds_amount || 0))}</div>
+                    <div className="text-xl font-bold">{formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
                     <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                       <div>Base: {formatCurrency(expense.amount)}</div>
                       <div>GST: {formatCurrency(expense.gst_amount)}</div>
-                      {expense.tds_amount && expense.tds_amount > 0 && (
+                      {expense.tds_amount > 0 && (
                         <>
                           <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
                           <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
