@@ -709,4 +709,6 @@ export default function AddIncome() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
 }

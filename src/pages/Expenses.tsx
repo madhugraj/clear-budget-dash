@@ -7,10 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Upload, FileText, FileSpreadsheet } from 'lucide-react';
-import { ExpensesList } from '@/components/ExpensesList';
+import { Loader2, Upload, FileText, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface BudgetItem {
@@ -21,6 +21,22 @@ interface BudgetItem {
   annual_budget: number;
   fiscal_year: string;
   serial_no: number;
+}
+
+interface ExpenseEntry {
+  id: string;
+  budget_master_id: string;
+  budget_item_name: string;
+  amount: number;
+  gst_percentage: number;
+  gst_amount: number;
+  tds_percentage: number;
+  tds_amount: number;
+  gross_amount: number;
+  net_payment: number;
+  description: string;
+  expense_date: string;
+  invoice: File | null;
 }
 
 interface HistoricalExpenseRow {
@@ -50,6 +66,9 @@ export default function Expenses() {
   const [invoice, setInvoice] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  
+  // Multiple expense entries
+  const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>([]);
   
   // Historical upload states
   const [historicalFile, setHistoricalFile] = useState<File | null>(null);
@@ -111,6 +130,162 @@ export default function Expenses() {
     }
   };
 
+  const handleAddExpense = () => {
+    if (!selectedBudgetItem) {
+      toast({
+        title: 'Missing budget item',
+        description: 'Please select a budget item.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Base amount must be greater than zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!description.trim()) {
+      toast({
+        title: 'Missing description',
+        description: 'Please provide a description.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const budgetItem = budgetItems.find(item => item.id === selectedBudgetItem);
+    if (!budgetItem) return;
+
+    const newEntry: ExpenseEntry = {
+      id: Date.now().toString(),
+      budget_master_id: selectedBudgetItem,
+      budget_item_name: budgetItem.item_name,
+      amount: parseFloat(amount),
+      gst_percentage: gstPercentage,
+      gst_amount: gstAmount,
+      tds_percentage: tdsPercentage,
+      tds_amount: tdsAmount,
+      gross_amount: grossAmount,
+      net_payment: netPayment,
+      description,
+      expense_date: expenseDate,
+      invoice,
+    };
+
+    setExpenseEntries([...expenseEntries, newEntry]);
+
+    // Reset form
+    setSelectedBudgetItem('');
+    setAmount('');
+    setGstPercentage(18);
+    setGstAmount(0);
+    setTdsPercentage(0);
+    setTdsAmount(0);
+    setDescription('');
+    setExpenseDate(new Date().toISOString().split('T')[0]);
+    setInvoice(null);
+    const fileInput = document.getElementById('invoice-upload') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+
+    toast({
+      title: 'Expense added',
+      description: 'Add more expenses or submit all for approval.',
+    });
+  };
+
+  const handleRemoveExpense = (id: string) => {
+    setExpenseEntries(expenseEntries.filter(entry => entry.id !== id));
+  };
+
+  const handleSubmitAll = () => {
+    if (expenseEntries.length === 0) {
+      toast({
+        title: 'No expenses to submit',
+        description: 'Please add at least one expense before submitting.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setPreviewOpen(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setLoading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      for (const entry of expenseEntries) {
+        let invoiceUrl = null;
+
+        // Upload invoice if provided
+        if (entry.invoice) {
+          const fileExt = entry.invoice.name.split('.').pop();
+          const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('invoices')
+            .upload(fileName, entry.invoice);
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('invoices')
+            .getPublicUrl(fileName);
+
+          invoiceUrl = publicUrl;
+        }
+
+        // Insert expense
+        const { error, data } = await supabase
+          .from('expenses')
+          .insert({
+            budget_master_id: entry.budget_master_id,
+            amount: entry.amount,
+            gst_amount: entry.gst_amount,
+            tds_percentage: entry.tds_percentage,
+            tds_amount: entry.tds_amount,
+            description: entry.description,
+            expense_date: entry.expense_date,
+            invoice_url: invoiceUrl,
+            claimed_by: user.id,
+            status: 'pending',
+          })
+          .select();
+
+        if (error) throw error;
+
+        // Send email notification in the background
+        supabase.functions.invoke('send-expense-notification', {
+          body: { expenseId: data?.[0]?.id, action: 'submitted' }
+        }).then(() => console.log('Email notification sent')).catch(err => console.error('Email failed:', err));
+      }
+
+      toast({
+        title: 'Submitted for approval',
+        description: `${expenseEntries.length} expense(s) submitted to treasurer for approval.`,
+      });
+
+      // Reset
+      setExpenseEntries([]);
+      setPreviewOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error submitting expenses',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleHistoricalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
@@ -124,18 +299,14 @@ export default function Expenses() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      // Look for "Summary-FOR WHOLE YEAR" sheet
       let sheetName = workbook.SheetNames.find(name => 
         name.toLowerCase().includes('summary') && 
         name.toLowerCase().includes('whole year')
       ) || workbook.SheetNames[0];
       
       const worksheet = workbook.Sheets[sheetName];
-      
-      // Get all data to find header row
       const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
       
-      // Find the header row
       let headerRowIndex = -1;
       for (let i = 0; i < allData.length; i++) {
         const row = allData[i] as any[];
@@ -149,20 +320,17 @@ export default function Expenses() {
         throw new Error('Could not find header row');
       }
       
-      // Parse data starting after the header row
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
         range: headerRowIndex + 1,
         defval: '' 
       });
 
-      // Helper function to clean currency values
       const cleanCurrency = (value: any): number => {
         if (!value) return 0;
         const str = String(value).replace(/[₹,\s]/g, '');
         return parseFloat(str) || 0;
       };
 
-      // Map to historical expense rows (columns 8-14 are monthly data)
       const expenseRows: HistoricalExpenseRow[] = jsonData
         .map((row: any) => {
           const serialNo = parseInt(String(row['SL.NO'] || row['1'] || '0'));
@@ -230,7 +398,6 @@ export default function Expenses() {
 
       const selectedPreview = historicalPreview.filter((_, index) => selectedHistoricalItems.has(index));
       
-      // Get all budget master items for matching
       const { data: budgetMasterItems, error: fetchError } = await supabase
         .from('budget_master')
         .select('*')
@@ -251,7 +418,6 @@ export default function Expenses() {
       let insertedCount = 0;
 
       for (const row of selectedPreview) {
-        // Find matching budget master item
         const budgetItem = budgetMasterItems?.find(
           item => item.serial_no === row.serial_no || 
                   item.item_name.toLowerCase() === row.item_name.toLowerCase()
@@ -262,7 +428,6 @@ export default function Expenses() {
           continue;
         }
 
-        // Create expenses for each month with non-zero amount
         for (const month of months) {
           const amount = row[month.key];
           if (amount > 0) {
@@ -292,7 +457,6 @@ export default function Expenses() {
         description: `Uploaded ${insertedCount} historical expense entries`,
       });
 
-      // Reset form
       setHistoricalFile(null);
       setHistoricalPreview([]);
       setSelectedHistoricalItems(new Set());
@@ -317,116 +481,12 @@ export default function Expenses() {
     }).format(amount);
   };
 
-  const handlePreview = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedBudgetItem) {
-      toast({
-        title: 'Missing budget item',
-        description: 'Please select a budget item before submitting.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!amount || parseFloat(amount) <= 0) {
-      toast({
-        title: 'Invalid amount',
-        description: 'Base amount must be greater than zero.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setPreviewOpen(true);
-  };
-
-  const handleConfirmSubmit = async () => {
-    setLoading(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      let invoiceUrl = null;
-
-      // Upload invoice if provided
-      if (invoice) {
-        const fileExt = invoice.name.split('.').pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('invoices')
-          .upload(fileName, invoice);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('invoices')
-          .getPublicUrl(fileName);
-
-        invoiceUrl = publicUrl;
-      }
-
-      // Insert expense
-      const { error, data } = await supabase
-        .from('expenses')
-        .insert({
-          budget_master_id: selectedBudgetItem,
-          amount: parseFloat(amount),
-          gst_amount: gstAmount,
-          tds_percentage: tdsPercentage,
-          tds_amount: tdsAmount,
-          description,
-          expense_date: expenseDate,
-          invoice_url: invoiceUrl,
-          claimed_by: user.id,
-          status: 'pending',
-        })
-        .select();
-
-      if (error) throw error;
-
-      // Send email notification in the background
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId: data?.[0]?.id, action: 'submitted' }
-      }).then(() => console.log('Email notification sent')).catch(err => console.error('Email failed:', err));
-
-      toast({
-        title: 'Submitted for approval',
-        description: 'Review completed and expense claim submitted to treasurer.',
-      });
-
-      // Reset form
-      setSelectedBudgetItem('');
-      setAmount('');
-      setGstPercentage(18);
-      setGstAmount(0);
-      setTdsPercentage(0);
-      setTdsAmount(0);
-      setDescription('');
-      setExpenseDate(new Date().toISOString().split('T')[0]);
-      setInvoice(null);
-      setPreviewOpen(false);
-      const fileInput = document.getElementById('invoice-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-    } catch (error: any) {
-      toast({
-        title: 'Error submitting expense',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="space-y-6 max-w-2xl animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-6xl animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold">Add Expense</h1>
         <p className="text-muted-foreground mt-2">
-          Submit a new expense claim for approval
+          Add expense items and submit all for approval
         </p>
       </div>
 
@@ -438,116 +498,96 @@ export default function Expenses() {
               Upload the Excel file with historical expenses from April to October 2025
             </CardDescription>
           </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="historical-file-upload">Excel File</Label>
-            <div className="flex items-center gap-4">
-              <Input
-                id="historical-file-upload"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleHistoricalFileChange}
-                className="cursor-pointer"
-              />
-              <Button
-                onClick={handleHistoricalUpload}
-                disabled={!historicalFile || historicalLoading}
-                className="min-w-[120px]"
-              >
-                {historicalLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {historicalPreview.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span>Preview: {historicalPreview.length} items ({selectedHistoricalItems.size} selected)</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedHistoricalItems(new Set(historicalPreview.map((_, i) => i)))}
-                  >
-                    Select All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedHistoricalItems(new Set())}
-                  >
-                    Deselect All
-                  </Button>
-                </div>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="historical-file-upload">Excel File</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="historical-file-upload"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleHistoricalFileChange}
+                  className="cursor-pointer"
+                />
+                <Button
+                  onClick={handleHistoricalUpload}
+                  disabled={!historicalFile || historicalLoading}
+                  className="min-w-[120px]"
+                >
+                  {historicalLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload
+                    </>
+                  )}
+                </Button>
               </div>
-              <div className="border rounded-lg overflow-hidden">
-                <div className="max-h-96 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted sticky top-0">
-                      <tr>
-                        <th className="text-left p-2 font-medium w-8">
-                          <input
-                            type="checkbox"
-                            checked={selectedHistoricalItems.size === historicalPreview.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedHistoricalItems(new Set(historicalPreview.map((_, i) => i)));
-                              } else {
-                                setSelectedHistoricalItems(new Set());
-                              }
-                            }}
-                            className="cursor-pointer"
-                          />
-                        </th>
-                        <th className="text-left p-2 font-medium">S.No</th>
-                        <th className="text-left p-2 font-medium">Item</th>
-                        <th className="text-right p-2 font-medium">Apr</th>
-                        <th className="text-right p-2 font-medium">May</th>
-                        <th className="text-right p-2 font-medium">Jun</th>
-                        <th className="text-right p-2 font-medium">Jul</th>
-                        <th className="text-right p-2 font-medium">Aug</th>
-                        <th className="text-right p-2 font-medium">Sep</th>
-                        <th className="text-right p-2 font-medium">Oct</th>
-                        <th className="text-right p-2 font-medium">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historicalPreview.map((row, index) => {
-                        const total = row.april + row.may + row.june + row.july + 
-                                     row.august + row.september + row.october;
-                        return (
-                          <tr key={index} className="border-t hover:bg-muted/50">
+            </div>
+
+            {historicalPreview.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    <span>Preview: {historicalPreview.length} items ({selectedHistoricalItems.size} selected)</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedHistoricalItems(new Set(historicalPreview.map((_, i) => i)))}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedHistoricalItems(new Set())}
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-96 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted sticky top-0">
+                        <tr>
+                          <th className="text-left p-2">Select</th>
+                          <th className="text-left p-2">Item</th>
+                          <th className="text-right p-2">Apr</th>
+                          <th className="text-right p-2">May</th>
+                          <th className="text-right p-2">Jun</th>
+                          <th className="text-right p-2">Jul</th>
+                          <th className="text-right p-2">Aug</th>
+                          <th className="text-right p-2">Sep</th>
+                          <th className="text-right p-2">Oct</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historicalPreview.map((row, index) => (
+                          <tr key={index} className="border-t">
                             <td className="p-2">
                               <input
                                 type="checkbox"
                                 checked={selectedHistoricalItems.has(index)}
                                 onChange={(e) => {
-                                  const newSelected = new Set(selectedHistoricalItems);
+                                  const newSet = new Set(selectedHistoricalItems);
                                   if (e.target.checked) {
-                                    newSelected.add(index);
+                                    newSet.add(index);
                                   } else {
-                                    newSelected.delete(index);
+                                    newSet.delete(index);
                                   }
-                                  setSelectedHistoricalItems(newSelected);
+                                  setSelectedHistoricalItems(newSet);
                                 }}
-                                className="cursor-pointer"
                               />
                             </td>
-                            <td className="p-2">{row.serial_no}</td>
-                            <td className="p-2 max-w-xs truncate">{row.item_name}</td>
+                            <td className="p-2">{row.item_name}</td>
                             <td className="p-2 text-right">{row.april > 0 ? formatCurrency(row.april) : '-'}</td>
                             <td className="p-2 text-right">{row.may > 0 ? formatCurrency(row.may) : '-'}</td>
                             <td className="p-2 text-right">{row.june > 0 ? formatCurrency(row.june) : '-'}</td>
@@ -555,295 +595,291 @@ export default function Expenses() {
                             <td className="p-2 text-right">{row.august > 0 ? formatCurrency(row.august) : '-'}</td>
                             <td className="p-2 text-right">{row.september > 0 ? formatCurrency(row.september) : '-'}</td>
                             <td className="p-2 text-right">{row.october > 0 ? formatCurrency(row.october) : '-'}</td>
-                            <td className="p-2 text-right font-medium">{formatCurrency(total)}</td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Expense Details</CardTitle>
+          <CardTitle>Expense Entry</CardTitle>
           <CardDescription>
-            Fill in the expense information and upload supporting documents (For expenses after October)
+            Fill in the details and add to the list below
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handlePreview} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="budget-item">Budget Item</Label>
-              <Select value={selectedBudgetItem} onValueChange={setSelectedBudgetItem} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a budget item" />
+              <Label htmlFor="budget-item">Budget Item *</Label>
+              <Select value={selectedBudgetItem} onValueChange={setSelectedBudgetItem}>
+                <SelectTrigger id="budget-item">
+                  <SelectValue placeholder="Select budget item" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
+                <SelectContent>
                   {budgetItems.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">{item.item_name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {item.category} • {item.committee} • ₹{item.annual_budget.toLocaleString()}
-                        </span>
-                      </div>
+                      {item.item_name} - {item.category}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Select the budget item this expense belongs to
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Base Amount (₹)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => {
-                    const baseAmount = parseFloat(e.target.value) || 0;
-                    setAmount(e.target.value);
-                    const calculatedGst = (baseAmount * gstPercentage) / 100;
-                    setGstAmount(parseFloat(calculatedGst.toFixed(2)));
-                  }}
-                  placeholder="10000.00"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Base expense amount excluding GST
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="gst-percentage">GST %</Label>
-                <Select
-                  value={gstPercentage.toString()}
-                  onValueChange={(value) => {
-                    const newPercentage = parseFloat(value);
-                    setGstPercentage(newPercentage);
-                    const baseAmount = parseFloat(amount) || 0;
-                    const calculatedGst = (baseAmount * newPercentage) / 100;
-                    setGstAmount(parseFloat(calculatedGst.toFixed(2)));
-                  }}
-                >
-                  <SelectTrigger id="gst-percentage">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5%</SelectItem>
-                    <SelectItem value="12">12%</SelectItem>
-                    <SelectItem value="18">18%</SelectItem>
-                    <SelectItem value="28">28%</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="gst-amount">GST Amount (₹)</Label>
-                <Input
-                  id="gst-amount"
-                  type="number"
-                  step="0.01"
-                  value={gstAmount}
-                  onChange={(e) => setGstAmount(parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Auto-calculated or enter manually
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tds-percentage">TDS %</Label>
-                <Select
-                  value={tdsPercentage.toString()}
-                  onValueChange={(value) => setTdsPercentage(parseFloat(value))}
-                >
-                  <SelectTrigger id="tds-percentage">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">0%</SelectItem>
-                    <SelectItem value="1">1%</SelectItem>
-                    <SelectItem value="2">2%</SelectItem>
-                    <SelectItem value="5">5%</SelectItem>
-                    <SelectItem value="10">10%</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="tds-amount">TDS Amount (₹)</Label>
-                <Input
-                  id="tds-amount"
-                  type="number"
-                  step="0.01"
-                  value={tdsAmount}
-                  onChange={(e) => setTdsAmount(parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Auto-calculated on Base Amount
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Gross Amount (₹)</Label>
-                <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
-                  <span className="font-semibold">
-                    ₹{grossAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Base + GST
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-primary/5 border-2 border-primary/20 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-base font-semibold">Net Payment</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Amount to be paid (Gross - TDS)
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">
-                    ₹{netPayment.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="expense-date">Expense Date</Label>
+              <Label htmlFor="expense-date">Date *</Label>
               <Input
                 id="expense-date"
                 type="date"
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="amount">Base Amount (₹) *</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gst-percentage">GST %</Label>
+              <Select
+                value={gstPercentage.toString()}
+                onValueChange={(value) => setGstPercentage(parseFloat(value))}
+              >
+                <SelectTrigger id="gst-percentage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5%</SelectItem>
+                  <SelectItem value="12">12%</SelectItem>
+                  <SelectItem value="18">18%</SelectItem>
+                  <SelectItem value="28">28%</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                GST Amount: {formatCurrency(gstAmount)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tds-percentage">TDS %</Label>
+              <Select
+                value={tdsPercentage.toString()}
+                onValueChange={(value) => setTdsPercentage(parseFloat(value))}
+              >
+                <SelectTrigger id="tds-percentage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0%</SelectItem>
+                  <SelectItem value="1">1%</SelectItem>
+                  <SelectItem value="2">2%</SelectItem>
+                  <SelectItem value="5">5%</SelectItem>
+                  <SelectItem value="10">10%</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                TDS Amount: {formatCurrency(tdsAmount)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Net Payment</Label>
+              <div className="text-2xl font-bold text-primary">
+                {formatCurrency(netPayment)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Gross: {formatCurrency(grossAmount)} - TDS: {formatCurrency(tdsAmount)}
+              </p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="description">Description *</Label>
               <Textarea
                 id="description"
+                placeholder="Describe the expense..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the expense in detail..."
-                rows={4}
-                required
+                rows={3}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="invoice-upload">
-                Invoice/Bill <span className="text-xs text-muted-foreground">(Recommended)</span>
-              </Label>
-              <div className="space-y-2">
-                <div className="flex items-center gap-4">
-                  <Input
-                    id="invoice-upload"
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleInvoiceChange}
-                    className="cursor-pointer"
-                  />
-                  {invoice && (
-                    <div className="flex items-center gap-2 text-sm text-success">
-                      <FileText className="h-4 w-4" />
-                      <span>{invoice.name}</span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Upload supporting documents (PDF, JPG, PNG). Files are stored securely.
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="invoice-upload">Invoice (Optional)</Label>
+              <Input
+                id="invoice-upload"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={handleInvoiceChange}
+                className="cursor-pointer"
+              />
+              {invoice && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  {invoice.name}
                 </p>
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Preview & Submit Expense
-                </>
               )}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-6 border-t mt-6">
+            <Button onClick={handleAddExpense} size="lg">
+              <Plus className="mr-2 h-4 w-4" />
+              Add to List
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
 
+      {expenseEntries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Expenses to Submit ({expenseEntries.length})</CardTitle>
+            <CardDescription>
+              Review and submit all expenses for approval
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Budget Item</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Base</TableHead>
+                    <TableHead className="text-right">GST</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">TDS</TableHead>
+                    <TableHead className="text-right">Net Payment</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenseEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-medium">{entry.budget_item_name}</TableCell>
+                      <TableCell>{new Date(entry.expense_date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(entry.amount)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(entry.gst_amount)}
+                        <span className="text-xs text-muted-foreground ml-1">({entry.gst_percentage}%)</span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(entry.gross_amount)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(entry.tds_amount)}
+                        <span className="text-xs text-muted-foreground ml-1">({entry.tds_percentage}%)</span>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-primary">{formatCurrency(entry.net_payment)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveExpense(entry.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex justify-end pt-6 border-t mt-6">
+              <Button onClick={handleSubmitAll} size="lg" className="min-w-[200px]">
+                Submit All for Approval
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Review Expense Before Submitting</DialogTitle>
+            <DialogTitle>Review Expenses Before Submitting</DialogTitle>
             <DialogDescription>
-              Please verify the calculated amounts before sending to the treasurer for approval.
+              Please verify all calculated amounts before sending to the treasurer for approval.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 mt-2 text-sm">
-            <div>
-              <p className="font-medium">Budget Item</p>
-              <p className="text-muted-foreground">
-                {budgetItems.find(b => b.id === selectedBudgetItem)?.item_name || 'Not selected'}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Base Amount</p>
-                <p className="font-semibold">{formatCurrency(parseFloat(amount) || 0)}</p>
+          <div className="space-y-4 mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Base</TableHead>
+                  <TableHead className="text-right">GST</TableHead>
+                  <TableHead className="text-right">Gross</TableHead>
+                  <TableHead className="text-right">TDS</TableHead>
+                  <TableHead className="text-right">Net Payment</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenseEntries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="font-medium">{entry.budget_item_name}</TableCell>
+                    <TableCell>{new Date(entry.expense_date).toLocaleDateString('en-IN')}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(entry.amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(entry.gst_amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(entry.gross_amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(entry.tds_amount)}</TableCell>
+                    <TableCell className="text-right font-bold">{formatCurrency(entry.net_payment)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Total Base Amount</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total GST</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.gst_amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total Gross</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.gross_amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total TDS</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.tds_amount, 0))}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Total Net Payment</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.net_payment, 0))}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">GST ({gstPercentage}%)</p>
-                <p className="font-semibold">{formatCurrency(gstAmount)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Gross Amount (Base + GST)</p>
-                <p className="font-semibold">{formatCurrency(grossAmount)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">TDS ({tdsPercentage}%)</p>
-                <p className="font-semibold">{formatCurrency(tdsAmount)}</p>
-              </div>
-            </div>
-            <div className="p-3 rounded-md bg-primary/5 border border-primary/20 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Net Payment (Gross - TDS)</p>
-                <p className="text-2xl font-bold text-primary">{formatCurrency(netPayment)}</p>
-              </div>
-              <div className="text-right text-xs text-muted-foreground">
-                <p>Date: {new Date(expenseDate).toLocaleDateString()}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Description</p>
-              <p>{description}</p>
             </div>
           </div>
-          <DialogFooter className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="mt-6 flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -869,18 +905,6 @@ export default function Expenses() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Expenses</CardTitle>
-          <CardDescription>
-            View all expenses you've submitted. Request corrections for approved expenses if needed.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ExpensesList />
-        </CardContent>
-      </Card>
     </div>
   );
 }
