@@ -3,10 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
+import { MonthlyIncomeChart } from '@/components/MonthlyIncomeChart';
+import { CategoryWiseIncomeChart } from '@/components/CategoryWiseIncomeChart';
 import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 import { BudgetMeter } from '@/components/BudgetMeter';
 import { OverBudgetAlert } from '@/components/OverBudgetAlert';
@@ -36,6 +39,19 @@ interface ItemData {
   committee: string;
 }
 
+interface MonthlyIncomeData {
+  month: string;
+  actual: number;
+  budget: number;
+}
+
+interface CategoryIncomeData {
+  category: string;
+  actual: number;
+  budget: number;
+  utilization: number;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
@@ -43,6 +59,8 @@ export default function Dashboard() {
   const [allItemData, setAllItemData] = useState<ItemData[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [allCommittees, setAllCommittees] = useState<string[]>([]);
+  const [monthlyIncomeData, setMonthlyIncomeData] = useState<MonthlyIncomeData[]>([]);
+  const [categoryIncomeData, setCategoryIncomeData] = useState<CategoryIncomeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartKey, setChartKey] = useState(0);
   const { toast } = useToast();
@@ -50,12 +68,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    loadIncomeData();
   }, []);
 
   const refreshCharts = () => {
     setChartKey(prev => prev + 1);
     setLoading(true);
     loadDashboardData();
+    loadIncomeData();
   };
 
   const loadDashboardData = async () => {
@@ -227,6 +247,91 @@ export default function Dashboard() {
     setItemData(filtered.slice(0, 5));
   };
 
+  const loadIncomeData = async () => {
+    try {
+      // Get income categories
+      const { data: categories, error: categoriesError } = await supabase
+        .from('income_categories')
+        .select('id, category_name, parent_category_id')
+        .eq('is_active', true)
+        .order('display_order');
+
+      if (categoriesError) throw categoriesError;
+
+      // Get parent categories only
+      const parentCategories = categories?.filter(c => !c.parent_category_id) || [];
+
+      // Get income budget data
+      const { data: budgetData, error: budgetError } = await supabase
+        .from('income_budget')
+        .select('category_id, budgeted_amount')
+        .eq('fiscal_year', 'FY25-26');
+
+      if (budgetError) throw budgetError;
+
+      // Get actual income data
+      const { data: actualData, error: actualError } = await supabase
+        .from('income_actuals')
+        .select('category_id, actual_amount, month')
+        .eq('fiscal_year', 'FY25-26');
+
+      if (actualError) throw actualError;
+
+      // Process monthly income data
+      const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+      const monthlyActuals: Record<number, number> = {};
+      
+      actualData?.forEach(actual => {
+        const monthIndex = actual.month - 4; // Apr = 4, convert to 0-indexed
+        if (monthIndex >= 0 && monthIndex < 7) {
+          monthlyActuals[monthIndex] = (monthlyActuals[monthIndex] || 0) + Number(actual.actual_amount);
+        }
+      });
+
+      const totalMonthlyBudget = budgetData?.reduce((sum, item) => sum + Number(item.budgeted_amount), 0) || 0;
+      const monthlyBudget = totalMonthlyBudget / 12;
+
+      const monthlyIncomeChartData = months.map((month, index) => ({
+        month,
+        actual: monthlyActuals[index] || 0,
+        budget: monthlyBudget,
+      }));
+
+      setMonthlyIncomeData(monthlyIncomeChartData);
+
+      // Process category-wise income data
+      const categoryMap: Record<string, { budget: number; actual: number }> = {};
+      
+      parentCategories.forEach(category => {
+        const budget = budgetData?.find(b => b.category_id === category.id);
+        const actuals = actualData?.filter(a => a.category_id === category.id);
+        const totalActual = actuals?.reduce((sum, a) => sum + Number(a.actual_amount), 0) || 0;
+        
+        categoryMap[category.category_name] = {
+          budget: Number(budget?.budgeted_amount || 0),
+          actual: totalActual,
+        };
+      });
+
+      const categoryIncomeChartData = Object.entries(categoryMap)
+        .map(([category, data]) => ({
+          category: category.length > 25 ? category.substring(0, 25) + '...' : category,
+          actual: data.actual,
+          budget: data.budget,
+          utilization: data.budget > 0 ? (data.actual / data.budget) * 100 : 0,
+        }))
+        .sort((a, b) => b.actual - a.actual);
+
+      setCategoryIncomeData(categoryIncomeChartData);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading income data',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
 
   if (loading) {
     return (
@@ -381,7 +486,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Expense Visualizations */}
+      {/* Income & Expense Tabs */}
       <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
         <div className="flex justify-end">
           <Button 
@@ -395,46 +500,77 @@ export default function Dashboard() {
           </Button>
         </div>
         
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="w-full overflow-hidden">
-            <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
-              <CardContent className="p-0">
-                <MonthlyExpenseChart key={`monthly-${chartKey}`} data={monthlyData} />
-              </CardContent>
-            </Card>
-          </div>
-          <div className="w-full overflow-hidden">
-            <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
-              <CardContent className="p-0">
-                <ItemWiseExpenseChart 
-                  key={`item-${chartKey}`}
-                  data={itemData} 
-                  allCategories={allCategories}
-                  allCommittees={allCommittees}
-                  onCategoryChange={handleCategoryFilter}
-                  onCommitteeChange={handleCommitteeFilter}
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+        <Tabs defaultValue="expense" className="w-full">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+            <TabsTrigger value="expense">Expense</TabsTrigger>
+            <TabsTrigger value="income">Income</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="expense" className="space-y-6 mt-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="w-full overflow-hidden">
+                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
+                  <CardContent className="p-0">
+                    <MonthlyExpenseChart key={`monthly-${chartKey}`} data={monthlyData} />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="w-full overflow-hidden">
+                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
+                  <CardContent className="p-0">
+                    <ItemWiseExpenseChart 
+                      key={`item-${chartKey}`}
+                      data={itemData} 
+                      allCategories={allCategories}
+                      allCommittees={allCommittees}
+                      onCategoryChange={handleCategoryFilter}
+                      onCommitteeChange={handleCommitteeFilter}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
 
-      {/* Item-wise Budget Analysis */}
-      <div className="w-full animate-[fade-in_0.6s_ease-out_0.6s_both]">
-        <ItemAnalysisCard 
-          items={allItemData.map(item => ({
-            item_name: item.item_name,
-            full_item_name: item.full_item_name,
-            budget: item.budget,
-            actual: item.amount,
-            utilization: item.utilization,
-            category: item.category,
-            committee: item.committee,
-            monthsElapsed: 7, // Apr - Oct 2025
-            monthsRemaining: 5, // Nov - Mar 2026
-          }))} 
-        />
+            {/* Item-wise Budget Analysis */}
+            <div className="w-full">
+              <ItemAnalysisCard 
+                items={allItemData.map(item => ({
+                  item_name: item.item_name,
+                  full_item_name: item.full_item_name,
+                  budget: item.budget,
+                  actual: item.amount,
+                  utilization: item.utilization,
+                  category: item.category,
+                  committee: item.committee,
+                  monthsElapsed: 7, // Apr - Oct 2025
+                  monthsRemaining: 5, // Nov - Mar 2026
+                }))} 
+              />
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="income" className="space-y-6 mt-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="w-full overflow-hidden">
+                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-2/5">
+                  <CardContent className="p-0">
+                    <MonthlyIncomeChart key={`monthly-income-${chartKey}`} data={monthlyIncomeData} />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="w-full overflow-hidden">
+                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-3/5">
+                  <CardContent className="p-0">
+                    <CategoryWiseIncomeChart 
+                      key={`category-income-${chartKey}`}
+                      data={categoryIncomeData}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
