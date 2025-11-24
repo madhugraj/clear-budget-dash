@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Upload, FileText, FileSpreadsheet } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function Expenses() {
   const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoice, setInvoice] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   
   // Historical upload states
   const [historicalFile, setHistoricalFile] = useState<File | null>(null);
@@ -57,6 +59,9 @@ export default function Expenses() {
   
   const { toast } = useToast();
   const { userRole } = useAuth();
+
+  const grossAmount = (parseFloat(amount) || 0) + gstAmount;
+  const netPayment = grossAmount - tdsAmount;
 
   useEffect(() => {
     loadBudgetItems();
@@ -312,8 +317,31 @@ export default function Expenses() {
     }).format(amount);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePreview = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!selectedBudgetItem) {
+      toast({
+        title: 'Missing budget item',
+        description: 'Please select a budget item before submitting.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Base amount must be greater than zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPreviewOpen(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     setLoading(true);
 
     try {
@@ -327,7 +355,7 @@ export default function Expenses() {
         const fileExt = invoice.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
-        const { error: uploadError, data: uploadData } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('invoices')
           .upload(fileName, invoice);
 
@@ -365,8 +393,8 @@ export default function Expenses() {
       }).then(() => console.log('Email notification sent')).catch(err => console.error('Email failed:', err));
 
       toast({
-        title: 'Success!',
-        description: 'Expense claim submitted for approval',
+        title: 'Submitted for approval',
+        description: 'Review completed and expense claim submitted to treasurer.',
       });
 
       // Reset form
@@ -379,6 +407,7 @@ export default function Expenses() {
       setDescription('');
       setExpenseDate(new Date().toISOString().split('T')[0]);
       setInvoice(null);
+      setPreviewOpen(false);
       const fileInput = document.getElementById('invoice-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     } catch (error: any) {
@@ -548,7 +577,7 @@ export default function Expenses() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handlePreview} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="budget-item">Budget Item</Label>
               <Select value={selectedBudgetItem} onValueChange={setSelectedBudgetItem} required>
@@ -676,7 +705,7 @@ export default function Expenses() {
                 <Label>Gross Amount (₹)</Label>
                 <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
                   <span className="font-semibold">
-                    ₹{((parseFloat(amount) || 0) + gstAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    ₹{grossAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -695,7 +724,7 @@ export default function Expenses() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-primary">
-                    ₹{((parseFloat(amount) || 0) + gstAmount - tdsAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    ₹{netPayment.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
@@ -759,13 +788,88 @@ export default function Expenses() {
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  Submit Expense
+                  Preview & Submit Expense
                 </>
               )}
             </Button>
           </form>
         </CardContent>
       </Card>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Expense Before Submitting</DialogTitle>
+            <DialogDescription>
+              Please verify the calculated amounts before sending to the treasurer for approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2 text-sm">
+            <div>
+              <p className="font-medium">Budget Item</p>
+              <p className="text-muted-foreground">
+                {budgetItems.find(b => b.id === selectedBudgetItem)?.item_name || 'Not selected'}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Base Amount</p>
+                <p className="font-semibold">{formatCurrency(parseFloat(amount) || 0)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">GST ({gstPercentage}%)</p>
+                <p className="font-semibold">{formatCurrency(gstAmount)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Gross Amount (Base + GST)</p>
+                <p className="font-semibold">{formatCurrency(grossAmount)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">TDS ({tdsPercentage}%)</p>
+                <p className="font-semibold">{formatCurrency(tdsAmount)}</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-md bg-primary/5 border border-primary/20 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Net Payment (Gross - TDS)</p>
+                <p className="text-2xl font-bold text-primary">{formatCurrency(netPayment)}</p>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <p>Date: {new Date(expenseDate).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Description</p>
+              <p>{description}</p>
+            </div>
+          </div>
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewOpen(false)}
+              disabled={loading}
+            >
+              Back to Edit
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmSubmit}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit for Approval'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader>
           <CardTitle>Your Expenses</CardTitle>

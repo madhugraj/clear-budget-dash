@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Save, Plus } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function AddIncome() {
   const [categories, setCategories] = useState<IncomeCategory[]>([]);
   const [parentCategories, setParentCategories] = useState<IncomeCategory[]>([]);
   const [incomeEntries, setIncomeEntries] = useState<Record<string, IncomeEntry>>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { toast } = useToast();
   const { userRole } = useAuth();
 
@@ -133,6 +135,22 @@ export default function AddIncome() {
     }
   };
 
+  const handlePreviewIncomes = () => {
+    const incomeRecords = Object.values(incomeEntries)
+      .filter(entry => entry.actual_amount > 0 || entry.gst_amount > 0);
+
+    if (incomeRecords.length === 0) {
+      toast({
+        title: 'No income to submit',
+        description: 'Please enter income amounts for at least one category',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPreviewOpen(true);
+  };
+
   const handleSaveIncomes = async () => {
     setLoading(true);
 
@@ -152,15 +170,6 @@ export default function AddIncome() {
           recorded_by: user.id,
         }));
 
-      if (incomeRecords.length === 0) {
-        toast({
-          title: 'No income to save',
-          description: 'Please enter income amounts for at least one category',
-          variant: 'destructive',
-        });
-        return;
-      }
-
       const { error } = await supabase
         .from('income_actuals')
         .upsert(incomeRecords, {
@@ -171,7 +180,7 @@ export default function AddIncome() {
       if (error) throw error;
 
       // Fetch the saved records to get their IDs for notification
-      const { data: savedRecords, error: fetchError } = await supabase
+      const { data: savedRecords } = await supabase
         .from('income_actuals')
         .select('id')
         .eq('fiscal_year', fiscalYear)
@@ -185,20 +194,21 @@ export default function AddIncome() {
             await supabase.functions.invoke('send-income-notification', {
               body: {
                 incomeId: record.id,
-                action: 'updated' // Could be 'created' or 'updated'
-              }
+                action: 'updated',
+              },
             });
           } catch (notifError) {
             console.error('Failed to send notification:', notifError);
-            // Don't block the UI if notification fails
           }
         }
       }
 
       toast({
-        title: 'Success!',
-        description: `Saved ${incomeRecords.length} income entries for ${MONTHS.find(m => m.value === selectedMonth)?.label} ${fiscalYear}`,
+        title: 'Submitted for approval',
+        description: `Validation completed and ${incomeRecords.length} income entries submitted.`,
       });
+
+      setPreviewOpen(false);
     } catch (error: any) {
       toast({
         title: 'Error saving income',
@@ -613,7 +623,7 @@ export default function AddIncome() {
 
           <div className="flex justify-end pt-4 border-t">
             <Button
-              onClick={handleSaveIncomes}
+              onClick={handlePreviewIncomes}
               disabled={loading}
               size="lg"
               className="min-w-[200px]"
@@ -626,13 +636,77 @@ export default function AddIncome() {
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Save Income Entries
+                  Preview & Submit Income
                 </>
               )}
             </Button>
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Review Income Entries Before Submitting</DialogTitle>
+            <DialogDescription>
+              Check the totals for each category and confirm before sending to the treasurer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2 text-sm max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-2">Category</th>
+                  <th className="text-right p-2">Base Amount</th>
+                  <th className="text-right p-2">GST Amount</th>
+                  <th className="text-right p-2">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map(cat => {
+                  const entry = incomeEntries[cat.id];
+                  const base = entry?.actual_amount || 0;
+                  const gst = entry?.gst_amount || 0;
+                  const total = base + gst;
+                  if (total <= 0) return null;
+                  return (
+                    <tr key={cat.id} className="border-t">
+                      <td className="p-2">
+                        {cat.subcategory_name || cat.category_name}
+                      </td>
+                      <td className="p-2 text-right">{formatCurrency(base)}</td>
+                      <td className="p-2 text-right">{formatCurrency(gst)}</td>
+                      <td className="p-2 text-right font-medium">{formatCurrency(total)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewOpen(false)}
+              disabled={loading}
+            >
+              Back to Edit
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveIncomes}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit for Approval'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 }
