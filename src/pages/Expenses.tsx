@@ -27,7 +27,7 @@ interface ExpenseEntry {
   id: string;
   budget_master_id: string;
   budget_item_name: string;
-  amount: number;
+  amount: string;
   gst_percentage: number;
   gst_amount: number;
   tds_percentage: number;
@@ -37,6 +37,7 @@ interface ExpenseEntry {
   description: string;
   expense_date: string;
   invoice: File | null;
+  isEditing?: boolean;
 }
 
 interface HistoricalExpenseRow {
@@ -165,7 +166,7 @@ export default function Expenses() {
       id: Date.now().toString(),
       budget_master_id: selectedBudgetItem,
       budget_item_name: budgetItem.item_name,
-      amount: parseFloat(amount),
+      amount: amount,
       gst_percentage: gstPercentage,
       gst_amount: gstAmount,
       tds_percentage: tdsPercentage,
@@ -175,6 +176,7 @@ export default function Expenses() {
       description,
       expense_date: expenseDate,
       invoice,
+      isEditing: false,
     };
 
     setExpenseEntries([...expenseEntries, newEntry]);
@@ -200,6 +202,25 @@ export default function Expenses() {
 
   const handleRemoveExpense = (id: string) => {
     setExpenseEntries(expenseEntries.filter(entry => entry.id !== id));
+  };
+
+  const handleEditExpense = (id: string, field: string, value: any) => {
+    setExpenseEntries(expenseEntries.map(entry => {
+      if (entry.id !== id) return entry;
+      
+      const updated = { ...entry, [field]: value };
+      
+      // Recalculate GST and TDS if amount or percentages change
+      if (field === 'amount' || field === 'gst_percentage' || field === 'tds_percentage') {
+        const baseAmount = parseFloat(updated.amount) || 0;
+        updated.gst_amount = (baseAmount * updated.gst_percentage) / 100;
+        updated.tds_amount = (baseAmount * updated.tds_percentage) / 100;
+        updated.gross_amount = baseAmount + updated.gst_amount;
+        updated.net_payment = updated.gross_amount - updated.tds_amount;
+      }
+      
+      return updated;
+    }));
   };
 
   const handleSubmitAll = () => {
@@ -247,7 +268,7 @@ export default function Expenses() {
           .from('expenses')
           .insert({
             budget_master_id: entry.budget_master_id,
-            amount: entry.amount,
+            amount: parseFloat(entry.amount),
             gst_amount: entry.gst_amount,
             tds_percentage: entry.tds_percentage,
             tds_amount: entry.tds_amount,
@@ -261,10 +282,12 @@ export default function Expenses() {
 
         if (error) throw error;
 
-        // Send email notification in the background
-        supabase.functions.invoke('send-expense-notification', {
-          body: { expenseId: data?.[0]?.id, action: 'submitted' }
-        }).then(() => console.log('Email notification sent')).catch(err => console.error('Email failed:', err));
+        // Send email notification in the background (fire and forget)
+        if (data?.[0]?.id) {
+          supabase.functions.invoke('send-expense-notification', {
+            body: { expenseId: data[0].id, action: 'submitted' }
+          }).catch(err => console.error('Email notification failed:', err));
+        }
       }
 
       toast({
@@ -758,32 +781,69 @@ export default function Expenses() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Budget Item</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Base</TableHead>
-                    <TableHead className="text-right">GST</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">TDS</TableHead>
+                    <TableHead className="w-[200px]">Budget Item</TableHead>
+                    <TableHead className="w-[120px]">Date</TableHead>
+                    <TableHead className="w-[120px]">Base</TableHead>
+                    <TableHead className="w-[100px]">GST %</TableHead>
+                    <TableHead className="w-[100px]">TDS %</TableHead>
                     <TableHead className="text-right">Net Payment</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="w-[60px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {expenseEntries.map((entry) => (
                     <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.budget_item_name}</TableCell>
-                      <TableCell>{new Date(entry.expense_date).toLocaleDateString('en-IN')}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(entry.amount)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(entry.gst_amount)}
-                        <span className="text-xs text-muted-foreground ml-1">({entry.gst_percentage}%)</span>
+                      <TableCell className="font-medium text-sm">{entry.budget_item_name}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="date"
+                          value={entry.expense_date}
+                          onChange={(e) => handleEditExpense(entry.id, 'expense_date', e.target.value)}
+                          className="h-8 text-xs"
+                        />
                       </TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(entry.gross_amount)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(entry.tds_amount)}
-                        <span className="text-xs text-muted-foreground ml-1">({entry.tds_percentage}%)</span>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={entry.amount}
+                          onChange={(e) => handleEditExpense(entry.id, 'amount', e.target.value)}
+                          className="h-8 text-xs text-right"
+                        />
                       </TableCell>
-                      <TableCell className="text-right font-bold text-primary">{formatCurrency(entry.net_payment)}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={entry.gst_percentage.toString()}
+                          onValueChange={(value) => handleEditExpense(entry.id, 'gst_percentage', parseFloat(value))}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5%</SelectItem>
+                            <SelectItem value="12">12%</SelectItem>
+                            <SelectItem value="18">18%</SelectItem>
+                            <SelectItem value="28">28%</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={entry.tds_percentage.toString()}
+                          onValueChange={(value) => handleEditExpense(entry.id, 'tds_percentage', parseFloat(value))}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">0%</SelectItem>
+                            <SelectItem value="1">1%</SelectItem>
+                            <SelectItem value="2">2%</SelectItem>
+                            <SelectItem value="5">5%</SelectItem>
+                            <SelectItem value="10">10%</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-sm">{formatCurrency(entry.net_payment)}</TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -834,7 +894,7 @@ export default function Expenses() {
                   <TableRow key={entry.id}>
                     <TableCell className="font-medium">{entry.budget_item_name}</TableCell>
                     <TableCell>{new Date(entry.expense_date).toLocaleDateString('en-IN')}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(entry.amount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(parseFloat(entry.amount) || 0)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(entry.gst_amount)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(entry.gross_amount)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(entry.tds_amount)}</TableCell>
@@ -849,7 +909,7 @@ export default function Expenses() {
                 <div>
                   <p className="text-muted-foreground">Total Base Amount</p>
                   <p className="text-lg font-semibold">
-                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + e.amount, 0))}
+                    {formatCurrency(expenseEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0))}
                   </p>
                 </div>
                 <div>
