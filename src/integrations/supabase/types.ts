@@ -296,6 +296,8 @@ export type Database = {
       income_actuals: {
         Row: {
           actual_amount: number
+          approved_at: string | null
+          approved_by: string | null
           category_id: string
           created_at: string
           fiscal_year: string
@@ -304,10 +306,13 @@ export type Database = {
           month: number
           notes: string | null
           recorded_by: string
+          status: string
           updated_at: string
         }
         Insert: {
           actual_amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
           category_id: string
           created_at?: string
           fiscal_year: string
@@ -316,10 +321,13 @@ export type Database = {
           month: number
           notes?: string | null
           recorded_by: string
+          status?: string
           updated_at?: string
         }
         Update: {
           actual_amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
           category_id?: string
           created_at?: string
           fiscal_year?: string
@@ -328,6 +336,7 @@ export type Database = {
           month?: number
           notes?: string | null
           recorded_by?: string
+          status?: string
           updated_at?: string
         }
         Relationships: [
