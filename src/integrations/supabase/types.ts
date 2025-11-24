@@ -51,15 +51,7 @@ export type Database = {
           old_values?: Json | null
           performed_by?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "audit_logs_expense_id_fkey"
-            columns: ["expense_id"]
-            isOneToOne: false
-            referencedRelation: "expenses"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       budget_items: {
         Row: {
