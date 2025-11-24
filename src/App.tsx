@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import BudgetUpload from "./pages/BudgetUpload";
+import IncomeBudgetUpload from "./pages/IncomeBudgetUpload";
 import Expenses from "./pages/Expenses";
 import Approvals from "./pages/Approvals";
 import Historical from "./pages/Historical";
@@ -49,6 +50,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <BudgetUpload />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/income-budget-upload"
+              element={
+                <ProtectedRoute requiredRole="treasurer">
+                  <AppLayout>
+                    <IncomeBudgetUpload />
                   </AppLayout>
                 </ProtectedRoute>
               }
