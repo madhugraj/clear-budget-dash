@@ -22,6 +22,7 @@ interface IncomeEntry {
   category_id: string;
   actual_amount: number;
   gst_amount: number;
+  gst_percentage: number;
   notes: string;
 }
 
@@ -80,12 +81,12 @@ export default function AddIncome() {
       data?.forEach(cat => {
         // Only initialize child categories and parents without children
         if (cat.parent_category_id !== null) {
-          initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, notes: '' };
+          initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, gst_percentage: 18, notes: '' };
         } else {
           // Check if parent has children
           const hasChildren = data.some(c => c.parent_category_id === cat.id);
           if (!hasChildren) {
-            initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, notes: '' };
+            initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, gst_percentage: 18, notes: '' };
           }
         }
       });
@@ -112,10 +113,16 @@ export default function AddIncome() {
       if (data && data.length > 0) {
         const loadedEntries: Record<string, IncomeEntry> = { ...incomeEntries };
         data.forEach(entry => {
+          // Calculate GST percentage from existing data if both amounts are present
+          const gstPercentage = entry.actual_amount > 0 && entry.gst_amount > 0
+            ? Math.round((entry.gst_amount / entry.actual_amount) * 100)
+            : 18;
+          
           loadedEntries[entry.category_id] = {
             category_id: entry.category_id,
             actual_amount: entry.actual_amount,
             gst_amount: entry.gst_amount || 0,
+            gst_percentage: gstPercentage,
             notes: entry.notes || '',
           };
         });
@@ -303,7 +310,7 @@ export default function AddIncome() {
                             ) : (
                               // Dual input for all other categories (Base + GST)
                               <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div className="space-y-2">
                                     <Label htmlFor={`base-${child.id}`}>Base Amount (excl. GST)</Label>
                                     <Input
@@ -312,19 +319,57 @@ export default function AddIncome() {
                                       min="0"
                                       step="0.01"
                                       value={incomeEntries[child.id]?.actual_amount || 0}
-                                      onChange={(e) => setIncomeEntries({
-                                        ...incomeEntries,
-                                        [child.id]: {
-                                          ...incomeEntries[child.id],
-                                          actual_amount: parseFloat(e.target.value) || 0,
-                                        },
-                                      })}
+                                      onChange={(e) => {
+                                        const baseAmount = parseFloat(e.target.value) || 0;
+                                        const gstPercentage = incomeEntries[child.id]?.gst_percentage || 18;
+                                        const calculatedGST = Math.round(baseAmount * (gstPercentage / 100) * 100) / 100;
+                                        
+                                        setIncomeEntries({
+                                          ...incomeEntries,
+                                          [child.id]: {
+                                            ...incomeEntries[child.id],
+                                            actual_amount: baseAmount,
+                                            gst_amount: calculatedGST,
+                                          },
+                                        });
+                                      }}
                                       placeholder="Enter base amount"
                                     />
                                   </div>
                                   
                                   <div className="space-y-2">
-                                    <Label htmlFor={`gst-${child.id}`}>GST Amount</Label>
+                                    <Label htmlFor={`gst-pct-${child.id}`}>GST %</Label>
+                                    <Select
+                                      value={(incomeEntries[child.id]?.gst_percentage || 18).toString()}
+                                      onValueChange={(value) => {
+                                        const gstPercentage = parseFloat(value);
+                                        const baseAmount = incomeEntries[child.id]?.actual_amount || 0;
+                                        const calculatedGST = Math.round(baseAmount * (gstPercentage / 100) * 100) / 100;
+                                        
+                                        setIncomeEntries({
+                                          ...incomeEntries,
+                                          [child.id]: {
+                                            ...incomeEntries[child.id],
+                                            gst_percentage: gstPercentage,
+                                            gst_amount: calculatedGST,
+                                          },
+                                        });
+                                      }}
+                                    >
+                                      <SelectTrigger id={`gst-pct-${child.id}`}>
+                                        <SelectValue placeholder="GST %" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="18">18%</SelectItem>
+                                        <SelectItem value="5">5%</SelectItem>
+                                        <SelectItem value="12">12%</SelectItem>
+                                        <SelectItem value="28">28%</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`gst-${child.id}`}>GST Amount (auto-calculated)</Label>
                                     <Input
                                       id={`gst-${child.id}`}
                                       type="number"
@@ -338,7 +383,8 @@ export default function AddIncome() {
                                           gst_amount: parseFloat(e.target.value) || 0,
                                         },
                                       })}
-                                      placeholder="Enter GST amount"
+                                      placeholder="Auto-calculated"
+                                      className="bg-muted"
                                     />
                                   </div>
                                 </div>
@@ -424,7 +470,7 @@ export default function AddIncome() {
                             ) : (
                               // Dual input for all other categories (Base + GST)
                               <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div className="space-y-2">
                                     <Label htmlFor={`base-${parent.id}`}>Base Amount (excl. GST)</Label>
                                     <Input
@@ -433,19 +479,57 @@ export default function AddIncome() {
                                       min="0"
                                       step="0.01"
                                       value={incomeEntries[parent.id]?.actual_amount || 0}
-                                      onChange={(e) => setIncomeEntries({
-                                        ...incomeEntries,
-                                        [parent.id]: {
-                                          ...incomeEntries[parent.id],
-                                          actual_amount: parseFloat(e.target.value) || 0,
-                                        },
-                                      })}
+                                      onChange={(e) => {
+                                        const baseAmount = parseFloat(e.target.value) || 0;
+                                        const gstPercentage = incomeEntries[parent.id]?.gst_percentage || 18;
+                                        const calculatedGST = Math.round(baseAmount * (gstPercentage / 100) * 100) / 100;
+                                        
+                                        setIncomeEntries({
+                                          ...incomeEntries,
+                                          [parent.id]: {
+                                            ...incomeEntries[parent.id],
+                                            actual_amount: baseAmount,
+                                            gst_amount: calculatedGST,
+                                          },
+                                        });
+                                      }}
                                       placeholder="Enter base amount"
                                     />
                                   </div>
                                   
                                   <div className="space-y-2">
-                                    <Label htmlFor={`gst-${parent.id}`}>GST Amount</Label>
+                                    <Label htmlFor={`gst-pct-${parent.id}`}>GST %</Label>
+                                    <Select
+                                      value={(incomeEntries[parent.id]?.gst_percentage || 18).toString()}
+                                      onValueChange={(value) => {
+                                        const gstPercentage = parseFloat(value);
+                                        const baseAmount = incomeEntries[parent.id]?.actual_amount || 0;
+                                        const calculatedGST = Math.round(baseAmount * (gstPercentage / 100) * 100) / 100;
+                                        
+                                        setIncomeEntries({
+                                          ...incomeEntries,
+                                          [parent.id]: {
+                                            ...incomeEntries[parent.id],
+                                            gst_percentage: gstPercentage,
+                                            gst_amount: calculatedGST,
+                                          },
+                                        });
+                                      }}
+                                    >
+                                      <SelectTrigger id={`gst-pct-${parent.id}`}>
+                                        <SelectValue placeholder="GST %" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="18">18%</SelectItem>
+                                        <SelectItem value="5">5%</SelectItem>
+                                        <SelectItem value="12">12%</SelectItem>
+                                        <SelectItem value="28">28%</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`gst-${parent.id}`}>GST Amount (auto-calculated)</Label>
                                     <Input
                                       id={`gst-${parent.id}`}
                                       type="number"
@@ -459,7 +543,8 @@ export default function AddIncome() {
                                           gst_amount: parseFloat(e.target.value) || 0,
                                         },
                                       })}
-                                      placeholder="Enter GST amount"
+                                      placeholder="Auto-calculated"
+                                      className="bg-muted"
                                     />
                                   </div>
                                 </div>
