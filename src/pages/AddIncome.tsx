@@ -170,6 +170,31 @@ export default function AddIncome() {
 
       if (error) throw error;
 
+      // Fetch the saved records to get their IDs for notification
+      const { data: savedRecords, error: fetchError } = await supabase
+        .from('income_actuals')
+        .select('id')
+        .eq('fiscal_year', fiscalYear)
+        .eq('month', selectedMonth)
+        .in('category_id', incomeRecords.map(r => r.category_id));
+
+      // Send notifications to treasurers
+      if (savedRecords && savedRecords.length > 0) {
+        for (const record of savedRecords) {
+          try {
+            await supabase.functions.invoke('send-income-notification', {
+              body: {
+                incomeId: record.id,
+                action: 'updated' // Could be 'created' or 'updated'
+              }
+            });
+          } catch (notifError) {
+            console.error('Failed to send notification:', notifError);
+            // Don't block the UI if notification fails
+          }
+        }
+      }
+
       toast({
         title: 'Success!',
         description: `Saved ${incomeRecords.length} income entries for ${MONTHS.find(m => m.value === selectedMonth)?.label} ${fiscalYear}`,
