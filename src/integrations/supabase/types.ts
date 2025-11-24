@@ -17,26 +17,38 @@ export type Database = {
       audit_logs: {
         Row: {
           action: string
+          correction_type: string | null
           created_at: string
           details: Json | null
           expense_id: string | null
           id: string
+          is_correction_log: boolean | null
+          new_values: Json | null
+          old_values: Json | null
           performed_by: string
         }
         Insert: {
           action: string
+          correction_type?: string | null
           created_at?: string
           details?: Json | null
           expense_id?: string | null
           id?: string
+          is_correction_log?: boolean | null
+          new_values?: Json | null
+          old_values?: Json | null
           performed_by: string
         }
         Update: {
           action?: string
+          correction_type?: string | null
           created_at?: string
           details?: Json | null
           expense_id?: string | null
           id?: string
+          is_correction_log?: boolean | null
+          new_values?: Json | null
+          old_values?: Json | null
           performed_by?: string
         }
         Relationships: [
@@ -136,12 +148,17 @@ export type Database = {
           budget_item_id: string | null
           budget_master_id: string | null
           claimed_by: string
+          correction_approved_at: string | null
+          correction_completed_at: string | null
+          correction_reason: string | null
+          correction_requested_at: string | null
           created_at: string
           description: string
           expense_date: string
           gst_amount: number
           id: string
           invoice_url: string | null
+          is_correction: boolean | null
           status: string
           updated_at: string
         }
@@ -151,12 +168,17 @@ export type Database = {
           budget_item_id?: string | null
           budget_master_id?: string | null
           claimed_by: string
+          correction_approved_at?: string | null
+          correction_completed_at?: string | null
+          correction_reason?: string | null
+          correction_requested_at?: string | null
           created_at?: string
           description: string
           expense_date: string
           gst_amount?: number
           id?: string
           invoice_url?: string | null
+          is_correction?: boolean | null
           status?: string
           updated_at?: string
         }
@@ -166,12 +188,17 @@ export type Database = {
           budget_item_id?: string | null
           budget_master_id?: string | null
           claimed_by?: string
+          correction_approved_at?: string | null
+          correction_completed_at?: string | null
+          correction_reason?: string | null
+          correction_requested_at?: string | null
           created_at?: string
           description?: string
           expense_date?: string
           gst_amount?: number
           id?: string
           invoice_url?: string | null
+          is_correction?: boolean | null
           status?: string
           updated_at?: string
         }

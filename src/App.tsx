@@ -13,6 +13,7 @@ import IncomeBudgetUpload from "./pages/IncomeBudgetUpload";
 import AddIncome from "./pages/AddIncome";
 import Expenses from "./pages/Expenses";
 import Approvals from "./pages/Approvals";
+import Corrections from "./pages/Corrections";
 import Historical from "./pages/Historical";
 import UserManagement from "./pages/UserManagement";
 import Reports from "./pages/Reports";
@@ -121,6 +122,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Historical />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/corrections"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Corrections />
                   </AppLayout>
                 </ProtectedRoute>
               }

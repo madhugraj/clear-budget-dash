@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Upload, FileText, FileSpreadsheet } from 'lucide-react';
+import { ExpensesList } from '@/components/ExpensesList';
 import * as XLSX from 'xlsx';
 
 interface BudgetItem {
@@ -687,6 +688,17 @@ export default function Expenses() {
               )}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Expenses</CardTitle>
+          <CardDescription>
+            View all expenses you've submitted. Request corrections for approved expenses if needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExpensesList />
         </CardContent>
       </Card>
     </div>
