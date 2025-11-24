@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Mail, Lock, Shield } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Lock, Shield, Clock } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 export default function Auth() {
@@ -16,6 +16,8 @@ export default function Auth() {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [expiryTimer, setExpiryTimer] = useState(0);
   const [mode, setMode] = useState<'login' | 'forgot'>('login');
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -29,22 +31,40 @@ export default function Auth() {
     });
   }, [navigate]);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!email || !password) {
-      toast({
-        title: 'Missing Information',
-        description: 'Please enter both email and password.',
-        variant: 'destructive',
-      });
-      return;
+  // Resend countdown timer
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
     }
+  }, [resendTimer]);
 
+  // Expiry countdown timer
+  useEffect(() => {
+    if (expiryTimer > 0) {
+      const interval = setInterval(() => {
+        setExpiryTimer((prev) => {
+          if (prev === 1) {
+            toast({
+              title: 'OTP Expired',
+              description: 'Your verification code has expired. Please request a new one.',
+              variant: 'destructive',
+            });
+            setOtpSent(false);
+            setOtp('');
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [expiryTimer, toast]);
+
+  const sendOtpCode = async () => {
     setLoading(true);
-
     try {
-      // Send OTP to email
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -55,6 +75,8 @@ export default function Auth() {
       if (error) throw error;
 
       setOtpSent(true);
+      setResendTimer(60);
+      setExpiryTimer(600); // 10 minutes
       toast({
         title: 'OTP Sent',
         description: 'Check your email for the 6-digit verification code.',
@@ -68,6 +90,26 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please enter both email and password.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    await sendOtpCode();
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    await sendOtpCode();
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -85,7 +127,7 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      // First verify OTP
+      // Verify OTP
       const { error: otpError } = await supabase.auth.verifyOtp({
         email,
         token: otp,
@@ -94,7 +136,7 @@ export default function Auth() {
 
       if (otpError) throw otpError;
 
-      // Then verify password
+      // Verify password
       const { error: passwordError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -145,6 +187,12 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -228,9 +276,15 @@ export default function Auth() {
                           </InputOTPGroup>
                         </InputOTP>
                       </div>
-                      <p className="text-xs text-center text-muted-foreground">
-                        OTP sent to {email}
-                      </p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                        <span>OTP sent to {email}</span>
+                        {expiryTimer > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Expires in {formatTime(expiryTimer)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Button type="submit" className="w-full" disabled={loading || otp.length !== 6}>
@@ -238,17 +292,30 @@ export default function Auth() {
                         <Shield className="mr-2 h-4 w-4" />
                         Verify & Login
                       </Button>
-                      <Button 
-                        type="button"
-                        variant="outline" 
-                        onClick={() => {
-                          setOtpSent(false);
-                          setOtp('');
-                        }}
-                        className="w-full"
-                      >
-                        Change Email/Password
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          type="button"
+                          variant="outline"
+                          onClick={handleResendOtp}
+                          disabled={resendTimer > 0 || loading}
+                          className="w-full"
+                        >
+                          {resendTimer > 0 ? `Resend (${resendTimer}s)` : 'Resend OTP'}
+                        </Button>
+                        <Button 
+                          type="button"
+                          variant="outline" 
+                          onClick={() => {
+                            setOtpSent(false);
+                            setOtp('');
+                            setResendTimer(0);
+                            setExpiryTimer(0);
+                          }}
+                          className="w-full"
+                        >
+                          Change Credentials
+                        </Button>
+                      </div>
                     </div>
                   </>
                 )}
