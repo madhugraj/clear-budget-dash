@@ -346,6 +346,7 @@ export type Database = {
           display_order: number
           id: string
           is_active: boolean
+          parent_category_id: string | null
           subcategory_name: string | null
           updated_at: string
         }
@@ -355,6 +356,7 @@ export type Database = {
           display_order: number
           id?: string
           is_active?: boolean
+          parent_category_id?: string | null
           subcategory_name?: string | null
           updated_at?: string
         }
@@ -364,10 +366,19 @@ export type Database = {
           display_order?: number
           id?: string
           is_active?: boolean
+          parent_category_id?: string | null
           subcategory_name?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "income_categories_parent_category_id_fkey"
+            columns: ["parent_category_id"]
+            isOneToOne: false
+            referencedRelation: "income_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

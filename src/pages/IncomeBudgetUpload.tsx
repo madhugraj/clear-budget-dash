@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileSpreadsheet, Loader2, Plus, Save } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, Save } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
 
 interface IncomeCategory {
@@ -14,6 +15,7 @@ interface IncomeCategory {
   category_name: string;
   subcategory_name: string | null;
   display_order: number;
+  parent_category_id: string | null;
 }
 
 interface IncomeBudgetRow {
@@ -29,8 +31,10 @@ export default function IncomeBudgetUpload() {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<IncomeBudgetRow[]>([]);
   const [categories, setCategories] = useState<IncomeCategory[]>([]);
+  const [parentCategories, setParentCategories] = useState<IncomeCategory[]>([]);
   const [manualBudgets, setManualBudgets] = useState<Record<string, number>>({});
   const { toast } = useToast();
+  const { userRole } = useAuth();
 
   useEffect(() => {
     fetchCategories();
@@ -47,11 +51,27 @@ export default function IncomeBudgetUpload() {
       if (error) throw error;
       setCategories(data || []);
       
+      // Separate parent and child categories
+      const parents = (data || []).filter(cat => cat.parent_category_id === null);
+      const children = (data || []).filter(cat => cat.parent_category_id !== null);
+      
+      setParentCategories(parents);
+      
       // Initialize manual budgets
       const initialBudgets: Record<string, number> = {};
-      data?.forEach(cat => {
-        initialBudgets[cat.id] = 0;
-      });
+      
+      // For treasurer: initialize with parent categories
+      // For accountant: initialize with all categories (including children)
+      if (userRole === 'treasurer') {
+        parents.forEach(cat => {
+          initialBudgets[cat.id] = 0;
+        });
+      } else {
+        data?.forEach(cat => {
+          initialBudgets[cat.id] = 0;
+        });
+      }
+      
       setManualBudgets(initialBudgets);
     } catch (error: any) {
       toast({
@@ -358,209 +378,114 @@ export default function IncomeBudgetUpload() {
               <CardHeader>
                 <CardTitle>Manual Budget Entry</CardTitle>
                 <CardDescription>
-                  Enter budget amounts for each income category individually
+                  {userRole === 'treasurer' 
+                    ? 'Enter budget amounts for each income category group'
+                    : 'Enter budget amounts for each income subcategory'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-6">
-                  {/* CAM */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">CAM</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'CAM with GST' || cat.category_name === 'CAM without GST')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
-                            {category.category_name.replace('CAM ', '')}
+                  {userRole === 'treasurer' ? (
+                    // Treasurer View: Show only parent categories
+                    parentCategories.map((parent) => (
+                      <div key={parent.id} className="space-y-3">
+                        <div className="flex items-center gap-4">
+                          <Label htmlFor={`budget-${parent.id}`} className="flex-1 font-semibold">
+                            {parent.category_name}
                           </Label>
                           <Input
-                            id={`budget-${category.id}`}
+                            id={`budget-${parent.id}`}
                             type="number"
                             min="0"
                             step="0.01"
-                            value={manualBudgets[category.id] || 0}
+                            value={manualBudgets[parent.id] || 0}
                             onChange={(e) => setManualBudgets({
                               ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
+                              [parent.id]: parseFloat(e.target.value) || 0,
                             })}
                             className="max-w-xs"
                             placeholder="Enter amount"
                           />
                         </div>
-                      ))}
-                  </div>
-
-                  {/* Interest from Banks */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Interest from Banks</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Interest Earned - Savings Account')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
-                            {category.subcategory_name || 'Interest'}
-                          </Label>
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
+                      </div>
+                    ))
+                  ) : (
+                    // Accountant View: Show all categories grouped by parent
+                    parentCategories.map((parent) => {
+                      const children = categories.filter(cat => cat.parent_category_id === parent.id);
+                      
+                      return (
+                        <div key={parent.id} className="space-y-3">
+                          <h3 className="font-semibold text-sm text-muted-foreground uppercase">
+                            {parent.category_name}
+                          </h3>
+                          {children.length > 0 ? (
+                            children.map((child) => (
+                              <div key={child.id} className="flex items-center gap-4 pl-4">
+                                <Label htmlFor={`budget-${child.id}`} className="flex-1">
+                                  {child.subcategory_name || child.category_name}
+                                </Label>
+                                <Input
+                                  id={`budget-${child.id}`}
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={manualBudgets[child.id] || 0}
+                                  onChange={(e) => setManualBudgets({
+                                    ...manualBudgets,
+                                    [child.id]: parseFloat(e.target.value) || 0,
+                                  })}
+                                  className="max-w-xs"
+                                  placeholder="Enter amount"
+                                />
+                              </div>
+                            ))
+                          ) : (
+                            // If no children, show the parent itself (for categories without subcategories)
+                            <div className="flex items-center gap-4 pl-4">
+                              <Label htmlFor={`budget-${parent.id}`} className="flex-1">
+                                Total Amount
+                              </Label>
+                              <Input
+                                id={`budget-${parent.id}`}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={manualBudgets[parent.id] || 0}
+                                onChange={(e) => setManualBudgets({
+                                  ...manualBudgets,
+                                  [parent.id]: parseFloat(e.target.value) || 0,
+                                })}
+                                className="max-w-xs"
+                                placeholder="Enter amount"
+                              />
+                            </div>
+                          )}
                         </div>
-                      ))}
-                  </div>
-
-                  {/* Sports and Training */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Sports and Training</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Events and Activities' && cat.subcategory_name === 'Sports & Training')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                      ))}
-                  </div>
-
-                  {/* Cultural Events (Stalls & Camps) */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Cultural Events (Stalls & Camps)</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Events and Activities' && cat.subcategory_name === 'Stalls')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                      ))}
-                  </div>
-
-                  {/* Income from Halls */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Income from Halls</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Rental from Halls')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
-                            {category.subcategory_name || 'Hall Rental'}
-                          </Label>
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                      ))}
-                  </div>
-
-                  {/* Commercial LetOuts */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Commercial LetOuts</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Commercial Letout Income Details')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Label htmlFor={`budget-${category.id}`} className="flex-1 text-xs">
-                            {category.subcategory_name}
-                          </Label>
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                      ))}
-                  </div>
-
-                  {/* Others */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Others</h3>
-                    {categories
-                      .filter(cat => cat.category_name === 'Others')
-                      .map((category) => (
-                        <div key={category.id} className="flex items-center gap-4 pl-4">
-                          <Input
-                            id={`budget-${category.id}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={manualBudgets[category.id] || 0}
-                            onChange={(e) => setManualBudgets({
-                              ...manualBudgets,
-                              [category.id]: parseFloat(e.target.value) || 0,
-                            })}
-                            className="max-w-xs"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                      ))}
-                  </div>
+                      );
+                    })
+                  )}
                 </div>
 
-                <Button
-                  onClick={handleSaveManualBudgets}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Budgets
-                    </>
-                  )}
-                </Button>
+                <div className="flex justify-end pt-4">
+                  <Button
+                    onClick={handleSaveManualBudgets}
+                    disabled={loading}
+                    className="min-w-[150px]"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Budgets
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
