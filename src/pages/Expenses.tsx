@@ -39,6 +39,8 @@ export default function Expenses() {
   const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
+  const [gstPercentage, setGstPercentage] = useState<number>(18);
+  const [gstAmount, setGstAmount] = useState<number>(0);
   const [description, setDescription] = useState<string>('');
   const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoice, setInvoice] = useState<File | null>(null);
@@ -323,6 +325,7 @@ export default function Expenses() {
         .insert({
           budget_master_id: selectedBudgetItem,
           amount: parseFloat(amount),
+          gst_amount: gstAmount,
           description,
           expense_date: expenseDate,
           invoice_url: invoiceUrl,
@@ -346,6 +349,8 @@ export default function Expenses() {
       // Reset form
       setSelectedBudgetItem('');
       setAmount('');
+      setGstPercentage(18);
+      setGstAmount(0);
       setDescription('');
       setExpenseDate(new Date().toISOString().split('T')[0]);
       setInvoice(null);
@@ -543,17 +548,80 @@ export default function Expenses() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount (₹)</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="10000.00"
-                required
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount">Base Amount (₹)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => {
+                    const baseAmount = parseFloat(e.target.value) || 0;
+                    setAmount(e.target.value);
+                    const calculatedGst = (baseAmount * gstPercentage) / 100;
+                    setGstAmount(parseFloat(calculatedGst.toFixed(2)));
+                  }}
+                  placeholder="10000.00"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Base expense amount excluding GST
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gst-percentage">GST %</Label>
+                <Select
+                  value={gstPercentage.toString()}
+                  onValueChange={(value) => {
+                    const newPercentage = parseFloat(value);
+                    setGstPercentage(newPercentage);
+                    const baseAmount = parseFloat(amount) || 0;
+                    const calculatedGst = (baseAmount * newPercentage) / 100;
+                    setGstAmount(parseFloat(calculatedGst.toFixed(2)));
+                  }}
+                >
+                  <SelectTrigger id="gst-percentage">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="12">12%</SelectItem>
+                    <SelectItem value="18">18%</SelectItem>
+                    <SelectItem value="28">28%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="gst-amount">GST Amount (₹)</Label>
+                <Input
+                  id="gst-amount"
+                  type="number"
+                  step="0.01"
+                  value={gstAmount}
+                  onChange={(e) => setGstAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-calculated or enter manually
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Total Amount (₹)</Label>
+                <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
+                  <span className="font-semibold text-lg">
+                    ₹{((parseFloat(amount) || 0) + gstAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Base + GST
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2">

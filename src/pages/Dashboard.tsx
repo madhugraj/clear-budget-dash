@@ -94,14 +94,14 @@ export default function Dashboard() {
       const currentYear = new Date().getFullYear();
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
-        .select('amount, status')
+        .select('amount, gst_amount, status')
         .eq('status', 'approved')
         .gte('expense_date', `${currentYear}-01-01`)
         .lte('expense_date', `${currentYear}-12-31`);
 
       if (expensesError) throw expensesError;
 
-      const totalExpenses = expensesData?.reduce((sum, exp) => sum + Number(exp.amount), 0) || 0;
+      const totalExpenses = expensesData?.reduce((sum, exp) => sum + Number(exp.amount) + Number(exp.gst_amount || 0), 0) || 0;
 
       // Get pending approvals
       const { data: pendingData, error: pendingError } = await supabase
@@ -121,7 +121,7 @@ export default function Dashboard() {
       // Get monthly spending data
       const { data: monthlyExpenses, error: monthlyError } = await supabase
         .from('expenses')
-        .select('amount, expense_date')
+        .select('amount, gst_amount, expense_date')
         .eq('status', 'approved')
         .gte('expense_date', '2025-04-01')
         .lte('expense_date', '2025-10-31')
@@ -145,7 +145,7 @@ export default function Dashboard() {
       
       monthlyExpenses?.forEach(exp => {
         const month = new Date(exp.expense_date).toLocaleString('en-US', { month: 'short' });
-        monthlyMap[month] = (monthlyMap[month] || 0) + Number(exp.amount);
+        monthlyMap[month] = (monthlyMap[month] || 0) + Number(exp.amount) + Number(exp.gst_amount || 0);
       });
 
       const monthlyChartData = months.map(month => ({
@@ -161,6 +161,7 @@ export default function Dashboard() {
         .from('expenses')
         .select(`
           amount,
+          gst_amount,
           budget_master!expenses_budget_master_id_fkey (
             item_name,
             annual_budget,
@@ -189,7 +190,7 @@ export default function Dashboard() {
           if (!itemMap[itemName]) {
             itemMap[itemName] = { amount: 0, budget: Number(budget), category, committee };
           }
-          itemMap[itemName].amount += Number(exp.amount);
+          itemMap[itemName].amount += Number(exp.amount) + Number(exp.gst_amount || 0);
           if (category) categoriesSet.add(category);
           if (committee) committeesSet.add(committee);
         }

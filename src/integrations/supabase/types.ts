@@ -139,6 +139,7 @@ export type Database = {
           created_at: string
           description: string
           expense_date: string
+          gst_amount: number
           id: string
           invoice_url: string | null
           status: string
@@ -153,6 +154,7 @@ export type Database = {
           created_at?: string
           description: string
           expense_date: string
+          gst_amount?: number
           id?: string
           invoice_url?: string | null
           status?: string
@@ -167,6 +169,7 @@ export type Database = {
           created_at?: string
           description?: string
           expense_date?: string
+          gst_amount?: number
           id?: string
           invoice_url?: string | null
           status?: string
