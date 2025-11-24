@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import BudgetUpload from "./pages/BudgetUpload";
 import IncomeBudgetUpload from "./pages/IncomeBudgetUpload";
+import AddIncome from "./pages/AddIncome";
 import Expenses from "./pages/Expenses";
 import Approvals from "./pages/Approvals";
 import Historical from "./pages/Historical";
@@ -60,6 +61,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="treasurer">
                   <AppLayout>
                     <IncomeBudgetUpload />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/add-income"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <AddIncome />
                   </AppLayout>
                 </ProtectedRoute>
               }
