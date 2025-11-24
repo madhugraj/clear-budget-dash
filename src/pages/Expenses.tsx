@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Upload, FileText, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -50,6 +51,7 @@ export default function Expenses() {
   const [historicalLoading, setHistoricalLoading] = useState(false);
   
   const { toast } = useToast();
+  const { userRole } = useAuth();
 
   useEffect(() => {
     loadBudgetItems();
@@ -369,13 +371,14 @@ export default function Expenses() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload Historical Expenses</CardTitle>
-          <CardDescription>
-            Upload the Excel file with historical expenses from April to October 2025
-          </CardDescription>
-        </CardHeader>
+      {userRole === 'treasurer' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upload Historical Expenses</CardTitle>
+            <CardDescription>
+              Upload the Excel file with historical expenses from April to October 2025
+            </CardDescription>
+          </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="historical-file-upload">Excel File</Label>
@@ -505,6 +508,7 @@ export default function Expenses() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>

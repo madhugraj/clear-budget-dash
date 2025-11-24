@@ -362,27 +362,186 @@ export default function IncomeBudgetUpload() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  {categories.map((category) => (
-                    <div key={category.id} className="flex items-center gap-4">
-                      <Label htmlFor={`budget-${category.id}`} className="flex-1">
-                        {getCategoryDisplay(category)}
-                      </Label>
-                      <Input
-                        id={`budget-${category.id}`}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={manualBudgets[category.id] || 0}
-                        onChange={(e) => setManualBudgets({
-                          ...manualBudgets,
-                          [category.id]: parseFloat(e.target.value) || 0,
-                        })}
-                        className="max-w-xs"
-                        placeholder="Enter amount"
-                      />
-                    </div>
-                  ))}
+                <div className="space-y-6">
+                  {/* CAM */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">CAM</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'CAM with GST' || cat.category_name === 'CAM without GST')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
+                            {category.category_name.replace('CAM ', '')}
+                          </Label>
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Interest from Banks */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Interest from Banks</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Interest Earned - Savings Account')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
+                            {category.subcategory_name || 'Interest'}
+                          </Label>
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Sports and Training */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Sports and Training</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Events and Activities' && cat.subcategory_name === 'Sports & Training')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Cultural Events (Stalls & Camps) */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Cultural Events (Stalls & Camps)</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Events and Activities' && cat.subcategory_name === 'Stalls')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Income from Halls */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Income from Halls</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Rental from Halls')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Label htmlFor={`budget-${category.id}`} className="flex-1">
+                            {category.subcategory_name || 'Hall Rental'}
+                          </Label>
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Commercial LetOuts */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Commercial LetOuts</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Commercial Letout Income Details')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Label htmlFor={`budget-${category.id}`} className="flex-1 text-xs">
+                            {category.subcategory_name}
+                          </Label>
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Others */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm text-muted-foreground uppercase">Others</h3>
+                    {categories
+                      .filter(cat => cat.category_name === 'Others')
+                      .map((category) => (
+                        <div key={category.id} className="flex items-center gap-4 pl-4">
+                          <Input
+                            id={`budget-${category.id}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualBudgets[category.id] || 0}
+                            onChange={(e) => setManualBudgets({
+                              ...manualBudgets,
+                              [category.id]: parseFloat(e.target.value) || 0,
+                            })}
+                            className="max-w-xs"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      ))}
+                  </div>
                 </div>
 
                 <Button

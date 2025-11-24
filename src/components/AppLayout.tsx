@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['treasurer', 'accountant', 'general'] },
-  { name: 'Upload Budget', href: '/budget-upload', icon: Upload, roles: ['treasurer'] },
+  { name: 'Upload Budget - Expense', href: '/budget-upload', icon: Upload, roles: ['treasurer'] },
   { name: 'Budget Upload - Income', href: '/income-budget-upload', icon: Upload, roles: ['treasurer'] },
   { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
