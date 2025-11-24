@@ -263,6 +263,7 @@ export type Database = {
           category_id: string
           created_at: string
           fiscal_year: string
+          gst_amount: number
           id: string
           month: number
           notes: string | null
@@ -274,6 +275,7 @@ export type Database = {
           category_id: string
           created_at?: string
           fiscal_year: string
+          gst_amount?: number
           id?: string
           month: number
           notes?: string | null
@@ -285,6 +287,7 @@ export type Database = {
           category_id?: string
           created_at?: string
           fiscal_year?: string
+          gst_amount?: number
           id?: string
           month?: number
           notes?: string | null

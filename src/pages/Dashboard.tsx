@@ -272,19 +272,20 @@ export default function Dashboard() {
       // Get actual income data
       const { data: actualData, error: actualError } = await supabase
         .from('income_actuals')
-        .select('category_id, actual_amount, month')
+        .select('category_id, actual_amount, gst_amount, month')
         .eq('fiscal_year', 'FY25-26');
 
       if (actualError) throw actualError;
 
-      // Process monthly income data
+      // Process monthly income data (merge base + GST)
       const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
       const monthlyActuals: Record<number, number> = {};
       
       actualData?.forEach(actual => {
         const monthIndex = actual.month - 4; // Apr = 4, convert to 0-indexed
         if (monthIndex >= 0 && monthIndex < 7) {
-          monthlyActuals[monthIndex] = (monthlyActuals[monthIndex] || 0) + Number(actual.actual_amount);
+          const totalIncome = Number(actual.actual_amount) + Number(actual.gst_amount || 0);
+          monthlyActuals[monthIndex] = (monthlyActuals[monthIndex] || 0) + totalIncome;
         }
       });
 
@@ -299,13 +300,16 @@ export default function Dashboard() {
 
       setMonthlyIncomeData(monthlyIncomeChartData);
 
-      // Process category-wise income data
+      // Process category-wise income data (merge base + GST)
       const categoryMap: Record<string, { budget: number; actual: number }> = {};
       
       parentCategories.forEach(category => {
         const budget = budgetData?.find(b => b.category_id === category.id);
         const actuals = actualData?.filter(a => a.category_id === category.id);
-        const totalActual = actuals?.reduce((sum, a) => sum + Number(a.actual_amount), 0) || 0;
+        const totalActual = actuals?.reduce((sum, a) => {
+          const totalIncome = Number(a.actual_amount) + Number(a.gst_amount || 0);
+          return sum + totalIncome;
+        }, 0) || 0;
         
         categoryMap[category.category_name] = {
           budget: Number(budget?.budgeted_amount || 0),

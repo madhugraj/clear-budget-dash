@@ -36,7 +36,10 @@ export const MonthlyIncomeChart = ({ data }: MonthlyIncomeChartProps) => {
               Budget: <span className="font-medium text-foreground">{formatCurrency(budget)}</span>
             </p>
             <p className="text-muted-foreground">
-              Actual: <span className="font-medium text-foreground">{formatCurrency(actual)}</span>
+              Actual (Total): <span className="font-medium text-foreground">{formatCurrency(actual)}</span>
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 italic">
+              (Base + GST combined)
             </p>
             <p className={variance >= 0 ? "text-green-600" : "text-red-600"}>
               Variance: <span className="font-medium">{formatCurrency(Math.abs(variance))} ({variancePercent}%)</span>

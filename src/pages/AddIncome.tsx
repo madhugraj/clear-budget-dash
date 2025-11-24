@@ -21,6 +21,7 @@ interface IncomeCategory {
 interface IncomeEntry {
   category_id: string;
   actual_amount: number;
+  gst_amount: number;
   notes: string;
 }
 
@@ -79,12 +80,12 @@ export default function AddIncome() {
       data?.forEach(cat => {
         // Only initialize child categories and parents without children
         if (cat.parent_category_id !== null) {
-          initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, notes: '' };
+          initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, notes: '' };
         } else {
           // Check if parent has children
           const hasChildren = data.some(c => c.parent_category_id === cat.id);
           if (!hasChildren) {
-            initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, notes: '' };
+            initialEntries[cat.id] = { category_id: cat.id, actual_amount: 0, gst_amount: 0, notes: '' };
           }
         }
       });
@@ -114,6 +115,7 @@ export default function AddIncome() {
           loadedEntries[entry.category_id] = {
             category_id: entry.category_id,
             actual_amount: entry.actual_amount,
+            gst_amount: entry.gst_amount || 0,
             notes: entry.notes || '',
           };
         });
@@ -132,12 +134,13 @@ export default function AddIncome() {
       if (!user) throw new Error('Not authenticated');
 
       const incomeRecords = Object.values(incomeEntries)
-        .filter(entry => entry.actual_amount > 0)
+        .filter(entry => entry.actual_amount > 0 || entry.gst_amount > 0)
         .map(entry => ({
           fiscal_year: fiscalYear,
           month: selectedMonth,
           category_id: entry.category_id,
           actual_amount: entry.actual_amount,
+          gst_amount: entry.gst_amount,
           notes: entry.notes,
           recorded_by: user.id,
         }));
@@ -247,92 +250,250 @@ export default function AddIncome() {
                     </h4>
                     
                     {children.length > 0 ? (
-                      children.map((child) => (
-                        <div key={child.id} className="p-4 border rounded-lg space-y-3">
-                          <div className="font-medium text-sm">
-                            {child.subcategory_name || child.category_name}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label htmlFor={`amount-${child.id}`}>Amount Received</Label>
-                              <Input
-                                id={`amount-${child.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={incomeEntries[child.id]?.actual_amount || 0}
-                                onChange={(e) => setIncomeEntries({
-                                  ...incomeEntries,
-                                  [child.id]: {
-                                    ...incomeEntries[child.id],
-                                    actual_amount: parseFloat(e.target.value) || 0,
-                                  },
-                                })}
-                                placeholder="Enter amount"
-                              />
+                      children.map((child) => {
+                        const isCAMWithoutGST = parent.category_name.toLowerCase().includes('cam without gst');
+                        const total = (incomeEntries[child.id]?.actual_amount || 0) + (incomeEntries[child.id]?.gst_amount || 0);
+                        
+                        return (
+                          <div key={child.id} className="p-4 border rounded-lg space-y-3">
+                            <div className="font-medium text-sm">
+                              {child.subcategory_name || child.category_name}
                             </div>
                             
-                            <div className="space-y-2">
-                              <Label htmlFor={`notes-${child.id}`}>Notes (Optional)</Label>
-                              <Input
-                                id={`notes-${child.id}`}
-                                type="text"
-                                value={incomeEntries[child.id]?.notes || ''}
-                                onChange={(e) => setIncomeEntries({
-                                  ...incomeEntries,
-                                  [child.id]: {
-                                    ...incomeEntries[child.id],
-                                    notes: e.target.value,
-                                  },
-                                })}
-                                placeholder="Add notes"
-                              />
-                            </div>
+                            {isCAMWithoutGST ? (
+                              // Single input for CAM without GST
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`amount-${child.id}`}>Amount Received</Label>
+                                  <Input
+                                    id={`amount-${child.id}`}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={incomeEntries[child.id]?.actual_amount || 0}
+                                    onChange={(e) => setIncomeEntries({
+                                      ...incomeEntries,
+                                      [child.id]: {
+                                        ...incomeEntries[child.id],
+                                        actual_amount: parseFloat(e.target.value) || 0,
+                                        gst_amount: 0,
+                                      },
+                                    })}
+                                    placeholder="Enter amount"
+                                  />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label htmlFor={`notes-${child.id}`}>Notes (Optional)</Label>
+                                  <Input
+                                    id={`notes-${child.id}`}
+                                    type="text"
+                                    value={incomeEntries[child.id]?.notes || ''}
+                                    onChange={(e) => setIncomeEntries({
+                                      ...incomeEntries,
+                                      [child.id]: {
+                                        ...incomeEntries[child.id],
+                                        notes: e.target.value,
+                                      },
+                                    })}
+                                    placeholder="Add notes"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              // Dual input for all other categories (Base + GST)
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`base-${child.id}`}>Base Amount (excl. GST)</Label>
+                                    <Input
+                                      id={`base-${child.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={incomeEntries[child.id]?.actual_amount || 0}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [child.id]: {
+                                          ...incomeEntries[child.id],
+                                          actual_amount: parseFloat(e.target.value) || 0,
+                                        },
+                                      })}
+                                      placeholder="Enter base amount"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`gst-${child.id}`}>GST Amount</Label>
+                                    <Input
+                                      id={`gst-${child.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={incomeEntries[child.id]?.gst_amount || 0}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [child.id]: {
+                                          ...incomeEntries[child.id],
+                                          gst_amount: parseFloat(e.target.value) || 0,
+                                        },
+                                      })}
+                                      placeholder="Enter GST amount"
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label className="text-muted-foreground">Total Income</Label>
+                                    <div className="px-3 py-2 bg-muted rounded-md font-semibold">
+                                      {formatCurrency(total)}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`notes-${child.id}`}>Notes (Optional)</Label>
+                                    <Input
+                                      id={`notes-${child.id}`}
+                                      type="text"
+                                      value={incomeEntries[child.id]?.notes || ''}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [child.id]: {
+                                          ...incomeEntries[child.id],
+                                          notes: e.target.value,
+                                        },
+                                      })}
+                                      placeholder="Add notes"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       // If no children, show the parent itself (for categories without subcategories like CAM)
-                      <div className="p-4 border rounded-lg space-y-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor={`amount-${parent.id}`}>Amount Received</Label>
-                            <Input
-                              id={`amount-${parent.id}`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={incomeEntries[parent.id]?.actual_amount || 0}
-                              onChange={(e) => setIncomeEntries({
-                                ...incomeEntries,
-                                [parent.id]: {
-                                  ...incomeEntries[parent.id],
-                                  actual_amount: parseFloat(e.target.value) || 0,
-                                },
-                              })}
-                              placeholder="Enter amount"
-                            />
+                      (() => {
+                        const isCAMWithoutGST = parent.category_name.toLowerCase().includes('cam without gst');
+                        const total = (incomeEntries[parent.id]?.actual_amount || 0) + (incomeEntries[parent.id]?.gst_amount || 0);
+                        
+                        return (
+                          <div className="p-4 border rounded-lg space-y-3">
+                            {isCAMWithoutGST ? (
+                              // Single input for CAM without GST
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`amount-${parent.id}`}>Amount Received</Label>
+                                  <Input
+                                    id={`amount-${parent.id}`}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={incomeEntries[parent.id]?.actual_amount || 0}
+                                    onChange={(e) => setIncomeEntries({
+                                      ...incomeEntries,
+                                      [parent.id]: {
+                                        ...incomeEntries[parent.id],
+                                        actual_amount: parseFloat(e.target.value) || 0,
+                                        gst_amount: 0,
+                                      },
+                                    })}
+                                    placeholder="Enter amount"
+                                  />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label htmlFor={`notes-${parent.id}`}>Notes (Optional)</Label>
+                                  <Input
+                                    id={`notes-${parent.id}`}
+                                    type="text"
+                                    value={incomeEntries[parent.id]?.notes || ''}
+                                    onChange={(e) => setIncomeEntries({
+                                      ...incomeEntries,
+                                      [parent.id]: {
+                                        ...incomeEntries[parent.id],
+                                        notes: e.target.value,
+                                      },
+                                    })}
+                                    placeholder="Add notes"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              // Dual input for all other categories (Base + GST)
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`base-${parent.id}`}>Base Amount (excl. GST)</Label>
+                                    <Input
+                                      id={`base-${parent.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={incomeEntries[parent.id]?.actual_amount || 0}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [parent.id]: {
+                                          ...incomeEntries[parent.id],
+                                          actual_amount: parseFloat(e.target.value) || 0,
+                                        },
+                                      })}
+                                      placeholder="Enter base amount"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`gst-${parent.id}`}>GST Amount</Label>
+                                    <Input
+                                      id={`gst-${parent.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={incomeEntries[parent.id]?.gst_amount || 0}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [parent.id]: {
+                                          ...incomeEntries[parent.id],
+                                          gst_amount: parseFloat(e.target.value) || 0,
+                                        },
+                                      })}
+                                      placeholder="Enter GST amount"
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label className="text-muted-foreground">Total Income</Label>
+                                    <div className="px-3 py-2 bg-muted rounded-md font-semibold">
+                                      {formatCurrency(total)}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`notes-${parent.id}`}>Notes (Optional)</Label>
+                                    <Input
+                                      id={`notes-${parent.id}`}
+                                      type="text"
+                                      value={incomeEntries[parent.id]?.notes || ''}
+                                      onChange={(e) => setIncomeEntries({
+                                        ...incomeEntries,
+                                        [parent.id]: {
+                                          ...incomeEntries[parent.id],
+                                          notes: e.target.value,
+                                        },
+                                      })}
+                                      placeholder="Add notes"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor={`notes-${parent.id}`}>Notes (Optional)</Label>
-                            <Input
-                              id={`notes-${parent.id}`}
-                              type="text"
-                              value={incomeEntries[parent.id]?.notes || ''}
-                              onChange={(e) => setIncomeEntries({
-                                ...incomeEntries,
-                                [parent.id]: {
-                                  ...incomeEntries[parent.id],
-                                  notes: e.target.value,
-                                },
-                              })}
-                              placeholder="Add notes"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()
                     )}
                   </div>
                 );

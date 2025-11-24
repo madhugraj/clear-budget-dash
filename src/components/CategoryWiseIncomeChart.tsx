@@ -40,7 +40,10 @@ export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) 
               Budget: <span className="font-medium text-foreground">{formatCurrency(data.budget)}</span>
             </p>
             <p className="text-muted-foreground">
-              Actual: <span className="font-medium text-foreground">{formatCurrency(data.actual)}</span>
+              Actual (Total): <span className="font-medium text-foreground">{formatCurrency(data.actual)}</span>
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 italic">
+              (Base + GST combined)
             </p>
             <p className="text-muted-foreground">
               Achievement: <span className="font-medium text-foreground">{data.utilization.toFixed(1)}%</span>
