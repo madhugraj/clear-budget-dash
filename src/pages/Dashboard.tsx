@@ -488,7 +488,8 @@ export default function Dashboard() {
 
       {/* Income & Expense Tabs */}
       <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-semibold text-foreground">Financial Analysis</h2>
           <Button 
             onClick={refreshCharts} 
             variant="outline" 
@@ -501,7 +502,7 @@ export default function Dashboard() {
         </div>
         
         <Tabs defaultValue="expense" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
             <TabsTrigger value="expense">Expense</TabsTrigger>
             <TabsTrigger value="income">Income</TabsTrigger>
           </TabsList>
