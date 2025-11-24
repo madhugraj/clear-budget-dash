@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, XCircle, ExternalLink, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 interface Expense {
   id: string;
@@ -36,8 +39,10 @@ export default function Approvals() {
   const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([]);
   const [correctionRequests, setCorrectionRequests] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
+  const [selectedCorrectionIds, setSelectedCorrectionIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   useEffect(() => {
@@ -114,151 +119,216 @@ export default function Approvals() {
   };
 
   const handleApprove = async (expenseId: string) => {
-    setProcessingId(expenseId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        status: 'approved',
+        approved_by: user.id,
+      })
+      .eq('id', expenseId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-expense-notification', {
+      body: { expenseId, action: 'approved' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkApprove = async (expenseIds: string[]) => {
+    setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          status: 'approved',
-          approved_by: user.id,
-        })
-        .eq('id', expenseId);
-
-      if (error) throw error;
-
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId, action: 'approved' }
-      }).then(() => console.log('Approval email sent')).catch(err => console.error('Email failed:', err));
+      for (const expenseId of expenseIds) {
+        await handleApprove(expenseId);
+      }
 
       toast({
-        title: 'Expense approved',
-        description: 'The expense has been approved successfully',
+        title: 'Expenses approved',
+        description: `${expenseIds.length} expense(s) approved successfully`,
       });
 
+      setSelectedPendingIds(new Set());
       await loadApprovals();
     } catch (error: any) {
       toast({
-        title: 'Error approving expense',
+        title: 'Error approving expenses',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
   };
 
   const handleReject = async (expenseId: string) => {
-    setProcessingId(expenseId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        status: 'rejected',
+        approved_by: user.id,
+      })
+      .eq('id', expenseId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-expense-notification', {
+      body: { expenseId, action: 'rejected' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkReject = async (expenseIds: string[]) => {
+    setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          status: 'rejected',
-          approved_by: user.id,
-        })
-        .eq('id', expenseId);
-
-      if (error) throw error;
-
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId, action: 'rejected' }
-      }).then(() => console.log('Rejection email sent')).catch(err => console.error('Email failed:', err));
+      for (const expenseId of expenseIds) {
+        await handleReject(expenseId);
+      }
 
       toast({
-        title: 'Expense rejected',
-        description: 'The expense has been rejected',
+        title: 'Expenses rejected',
+        description: `${expenseIds.length} expense(s) rejected`,
         variant: 'destructive',
       });
 
+      setSelectedPendingIds(new Set());
       await loadApprovals();
     } catch (error: any) {
       toast({
-        title: 'Error rejecting expense',
+        title: 'Error rejecting expenses',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
   };
 
   const handleApproveCorrection = async (expenseId: string) => {
-    setProcessingId(expenseId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        status: 'correction_approved',
+        approved_by: user.id,
+        correction_approved_at: new Date().toISOString(),
+      })
+      .eq('id', expenseId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-expense-notification', {
+      body: { expenseId, action: 'correction_approved' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkApproveCorrections = async (expenseIds: string[]) => {
+    setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          status: 'correction_approved',
-          approved_by: user.id,
-          correction_approved_at: new Date().toISOString(),
-        })
-        .eq('id', expenseId);
-
-      if (error) throw error;
-
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId, action: 'correction_approved' }
-      }).then(() => console.log('Correction approval email sent')).catch(err => console.error('Email failed:', err));
+      for (const expenseId of expenseIds) {
+        await handleApproveCorrection(expenseId);
+      }
 
       toast({
-        title: 'Correction approved',
-        description: 'The accountant can now edit this expense',
+        title: 'Corrections approved',
+        description: `${expenseIds.length} correction(s) approved successfully`,
       });
 
+      setSelectedCorrectionIds(new Set());
       await loadApprovals();
     } catch (error: any) {
       toast({
-        title: 'Error approving correction',
+        title: 'Error approving corrections',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
   };
 
   const handleRejectCorrection = async (expenseId: string) => {
-    setProcessingId(expenseId);
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        status: 'approved',
+        correction_reason: null,
+        correction_requested_at: null,
+      })
+      .eq('id', expenseId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-expense-notification', {
+      body: { expenseId, action: 'correction_rejected' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkRejectCorrections = async (expenseIds: string[]) => {
+    setProcessing(true);
     try {
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          status: 'approved',
-          correction_reason: null,
-          correction_requested_at: null,
-        })
-        .eq('id', expenseId);
-
-      if (error) throw error;
-
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId, action: 'correction_rejected' }
-      }).then(() => console.log('Correction rejection email sent')).catch(err => console.error('Email failed:', err));
+      for (const expenseId of expenseIds) {
+        await handleRejectCorrection(expenseId);
+      }
 
       toast({
-        title: 'Correction rejected',
-        description: 'The expense will remain as-is',
+        title: 'Corrections rejected',
+        description: `${expenseIds.length} correction(s) rejected`,
+        variant: 'destructive',
       });
 
+      setSelectedCorrectionIds(new Set());
       await loadApprovals();
     } catch (error: any) {
       toast({
-        title: 'Error rejecting correction',
+        title: 'Error rejecting corrections',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
+  };
+
+  const togglePendingSelection = (id: string) => {
+    const newSet = new Set(selectedPendingIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedPendingIds(newSet);
+  };
+
+  const toggleCorrectionSelection = (id: string) => {
+    const newSet = new Set(selectedCorrectionIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedCorrectionIds(newSet);
+  };
+
+  const selectAllPending = () => {
+    setSelectedPendingIds(new Set(pendingExpenses.map(e => e.id)));
+  };
+
+  const deselectAllPending = () => {
+    setSelectedPendingIds(new Set());
+  };
+
+  const selectAllCorrections = () => {
+    setSelectedCorrectionIds(new Set(correctionRequests.map(e => e.id)));
+  };
+
+  const deselectAllCorrections = () => {
+    setSelectedCorrectionIds(new Set());
   };
 
   const formatCurrency = (amount: number) => {
@@ -286,260 +356,364 @@ export default function Approvals() {
         </p>
       </div>
 
-      {correctionRequests.length > 0 && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Correction Requests</h2>
-            <p className="text-sm text-muted-foreground">Accountants requesting to correct approved expenses</p>
-          </div>
-          <div className="grid gap-4">
-            {correctionRequests.map((expense) => (
-              <Card key={expense.id} className="border-orange-200 bg-orange-50/50">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2 flex-1 min-w-0">
-                      <CardTitle className="text-lg">{expense.description}</CardTitle>
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
-                          <span>•</span>
-                          <span>{expense.budget_master?.category}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span>{new Date(expense.expense_date).toLocaleDateString()}</span>
-                          <span>•</span>
-                          <span>By {expense.profiles?.full_name || expense.profiles?.email}</span>
-                        </div>
-                        {expense.correction_reason && (
-                          <div className="mt-2 p-3 bg-white border border-orange-200 rounded">
-                            <p className="font-medium text-orange-900">Reason for Correction:</p>
-                            <p className="text-sm mt-1">{expense.correction_reason}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount))}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Base: {formatCurrency(expense.amount)}<br />
-                        GST: {formatCurrency(expense.gst_amount)}
-                      </div>
-                      <Badge className="mt-2 bg-orange-500">Correction Request</Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2">
-                    {expense.invoice_url && (
+      <Tabs defaultValue="pending" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="pending">
+            Pending ({pendingExpenses.length})
+          </TabsTrigger>
+          <TabsTrigger value="corrections">
+            Corrections ({correctionRequests.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Expense Approvals</CardTitle>
+              <CardDescription>New expense claims awaiting approval</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingExpenses.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  No pending approvals
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(expense.invoice_url!, '_blank')}
+                        onClick={selectAllPending}
+                        disabled={processing}
                       >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        View Invoice
-                      </Button>
-                    )}
-                    <div className="ml-auto flex gap-2">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleRejectCorrection(expense.id)}
-                        disabled={processingId === expense.id}
-                      >
-                        {processingId === expense.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <XCircle className="h-4 w-4 mr-2" />
-                            Reject Request
-                          </>
-                        )}
+                        Select All
                       </Button>
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleApproveCorrection(expense.id)}
-                        disabled={processingId === expense.id}
+                        onClick={deselectAllPending}
+                        disabled={processing || selectedPendingIds.size === 0}
                       >
-                        {processingId === expense.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve Correction
-                          </>
-                        )}
+                        Deselect All
                       </Button>
                     </div>
+                    {selectedPendingIds.size > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleBulkReject(Array.from(selectedPendingIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Reject ({selectedPendingIds.size})
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkApprove(Array.from(selectedPendingIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Approve ({selectedPendingIds.size})
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <Separator className="my-6" />
-        </div>
-      )}
 
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Pending Expense Approvals</h2>
-          <p className="text-sm text-muted-foreground">New expense claims awaiting approval</p>
-        </div>
-        {pendingExpenses.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">No pending approvals</p>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Item</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Claimed By</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Net Payment</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingExpenses.map((expense) => {
+                          const grossAmount = Number(expense.amount) + Number(expense.gst_amount);
+                          const netPayment = grossAmount - Number(expense.tds_amount || 0);
+                          
+                          return (
+                            <TableRow key={expense.id} className={cn(selectedPendingIds.has(expense.id) && "bg-muted/50")}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedPendingIds.has(expense.id)}
+                                  onCheckedChange={() => togglePendingSelection(expense.id)}
+                                  disabled={processing}
+                                />
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {new Date(expense.expense_date).toLocaleDateString('en-IN')}
+                              </TableCell>
+                              <TableCell className="font-medium text-sm">
+                                {expense.budget_master?.item_name || 'N/A'}
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate text-sm">
+                                {expense.description}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {expense.profiles?.full_name || expense.profiles?.email}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                <div className="font-medium">{formatCurrency(grossAmount)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Base: {formatCurrency(expense.amount)}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-bold text-sm">
+                                {formatCurrency(netPayment)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {expense.invoice_url && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(expense.invoice_url!, '_blank')}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedExpense(expense)}
+                                  >
+                                    View
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid gap-4">
-            {pendingExpenses.map((expense) => (
-            <Card key={expense.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <CardTitle className="text-lg">{expense.description}</CardTitle>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
-                        <span>•</span>
-                        <span>{expense.budget_master?.category}</span>
-                        <span>•</span>
-                        <span>{expense.budget_master?.committee}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span>{new Date(expense.expense_date).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>By {expense.profiles?.full_name || expense.profiles?.email}</span>
-                      </div>
-                    </div>
-                  </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount))}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Base: {formatCurrency(expense.amount)}<br />
-                        GST: {formatCurrency(expense.gst_amount)}
-                      </div>
-                      <Badge variant="secondary" className="mt-1">Pending</Badge>
-                    </div>
+        </TabsContent>
+
+        <TabsContent value="corrections" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Correction Requests</CardTitle>
+              <CardDescription>Accountants requesting to correct approved expenses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {correctionRequests.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  No correction requests
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  {expense.invoice_url && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(expense.invoice_url!, '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      View Invoice
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedExpense(expense)}
-                  >
-                    View Details
-                  </Button>
-                  <div className="ml-auto flex gap-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleReject(expense.id)}
-                      disabled={processingId === expense.id}
-                    >
-                      {processingId === expense.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Reject
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(expense.id)}
-                      disabled={processingId === expense.id}
-                    >
-                      {processingId === expense.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Approve
-                        </>
-                      )}
-                    </Button>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={selectAllCorrections}
+                        disabled={processing}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={deselectAllCorrections}
+                        disabled={processing || selectedCorrectionIds.size === 0}
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                    {selectedCorrectionIds.size > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleBulkRejectCorrections(Array.from(selectedCorrectionIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Reject ({selectedCorrectionIds.size})
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkApproveCorrections(Array.from(selectedCorrectionIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Approve ({selectedCorrectionIds.size})
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-            ))}
-          </div>
-        )}
-      </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Item</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Reason</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {correctionRequests.map((expense) => {
+                          const grossAmount = Number(expense.amount) + Number(expense.gst_amount);
+                          
+                          return (
+                            <TableRow key={expense.id} className={cn(selectedCorrectionIds.has(expense.id) && "bg-orange-50/50")}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedCorrectionIds.has(expense.id)}
+                                  onCheckedChange={() => toggleCorrectionSelection(expense.id)}
+                                  disabled={processing}
+                                />
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {new Date(expense.expense_date).toLocaleDateString('en-IN')}
+                              </TableCell>
+                              <TableCell className="font-medium text-sm">
+                                {expense.budget_master?.item_name || 'N/A'}
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate text-sm">
+                                {expense.description}
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate text-sm">
+                                {expense.correction_reason || 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                <div className="font-medium">{formatCurrency(grossAmount)}</div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {expense.invoice_url && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(expense.invoice_url!, '_blank')}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedExpense(expense)}
+                                  >
+                                    View
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!selectedExpense} onOpenChange={() => setSelectedExpense(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Expense Details</DialogTitle>
             <DialogDescription>Complete information about this expense claim</DialogDescription>
           </DialogHeader>
           {selectedExpense && (
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Budget Item</label>
-                <p className="mt-1 font-medium">{selectedExpense.budget_master?.item_name || 'N/A'}</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {selectedExpense.budget_master?.category} • {selectedExpense.budget_master?.committee}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Description</label>
-                <p className="mt-1">{selectedExpense.description}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Amount</label>
-                  <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount + selectedExpense.gst_amount))}</p>
-                  <p className="text-xs text-muted-foreground">Base: {formatCurrency(selectedExpense.amount)} + GST: {formatCurrency(selectedExpense.gst_amount)}</p>
+                  <p className="text-muted-foreground">Description</p>
+                  <p className="font-medium">{selectedExpense.description}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Budget</label>
-                  <p className="mt-1">{formatCurrency(Number(selectedExpense.budget_master?.annual_budget || 0))}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Expense Date</label>
-                  <p className="mt-1">{new Date(selectedExpense.expense_date).toLocaleDateString()}</p>
+                  <p className="text-muted-foreground">Date</p>
+                  <p className="font-medium">{new Date(selectedExpense.expense_date).toLocaleDateString('en-IN')}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Submitted</label>
-                  <p className="mt-1">{new Date(selectedExpense.created_at).toLocaleDateString()}</p>
+                  <p className="text-muted-foreground">Budget Item</p>
+                  <p className="font-medium">{selectedExpense.budget_master?.item_name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Category</p>
+                  <p className="font-medium">{selectedExpense.budget_master?.category || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Base Amount</p>
+                  <p className="font-medium">{formatCurrency(selectedExpense.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">GST Amount</p>
+                  <p className="font-medium">{formatCurrency(selectedExpense.gst_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">TDS ({selectedExpense.tds_percentage}%)</p>
+                  <p className="font-medium">{formatCurrency(selectedExpense.tds_amount || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Net Payment</p>
+                  <p className="font-bold text-lg">
+                    {formatCurrency(Number(selectedExpense.amount) + Number(selectedExpense.gst_amount) - Number(selectedExpense.tds_amount || 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Claimed By</p>
+                  <p className="font-medium">{selectedExpense.profiles?.full_name || selectedExpense.profiles?.email}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge>{selectedExpense.status}</Badge>
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Claimed By</label>
-                <p className="mt-1">{selectedExpense.profiles?.full_name}</p>
-                <p className="text-sm text-muted-foreground">{selectedExpense.profiles?.email}</p>
-              </div>
+              {selectedExpense.correction_reason && (
+                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="font-medium text-orange-900 mb-2">Correction Reason:</p>
+                  <p className="text-sm">{selectedExpense.correction_reason}</p>
+                </div>
+              )}
               {selectedExpense.invoice_url && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Invoice</label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-1 w-full"
-                    onClick={() => window.open(selectedExpense.invoice_url!, '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View Invoice
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(selectedExpense.invoice_url!, '_blank')}
+                  className="w-full"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View Invoice
+                </Button>
               )}
             </div>
           )}
