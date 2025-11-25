@@ -9,8 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, History, Edit, CheckCircle } from 'lucide-react';
+import { Loader2, History, Edit, CheckCircle, Calendar, AlertCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
 
 interface Expense {
   id: string;
@@ -73,13 +77,50 @@ export default function Corrections() {
   const [budgetItems, setBudgetItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Historical Data tab states
+  const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
+  const [historicalLoading, setHistoricalLoading] = useState(false);
+  const [selectedHistorical, setSelectedHistorical] = useState<Set<string>>(new Set());
+  const [dateFrom, setDateFrom] = useState<string>('2024-04-01');
+  const [dateTo, setDateTo] = useState<string>('2024-10-31');
+  const [historicalFilter, setHistoricalFilter] = useState<string>('both');
+  const [dailyUsage, setDailyUsage] = useState<number>(0);
+  const [showBulkDialog, setShowBulkDialog] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
   const { toast } = useToast();
   const { userRole } = useAuth();
+
+  const DAILY_LIMIT = 20;
 
   useEffect(() => {
     loadCorrections();
     loadBudgetItems();
+    loadDailyUsage();
   }, [filterStatus]);
+
+  useEffect(() => {
+    if (userRole === 'accountant') {
+      loadHistoricalExpenses();
+    }
+  }, [dateFrom, dateTo, historicalFilter, userRole]);
+
+  const loadDailyUsage = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { count, error } = await supabase
+        .from('expenses')
+        .select('*', { count: 'exact', head: true })
+        .gte('correction_requested_at', `${today}T00:00:00`)
+        .lte('correction_requested_at', `${today}T23:59:59`);
+
+      if (error) throw error;
+      setDailyUsage(count || 0);
+    } catch (error: any) {
+      console.error('Error loading daily usage:', error);
+    }
+  };
 
   const loadBudgetItems = async () => {
     try {
@@ -93,6 +134,64 @@ export default function Corrections() {
       setBudgetItems(data || []);
     } catch (error: any) {
       console.error('Error loading budget items:', error);
+    }
+  };
+
+  const loadHistoricalExpenses = async () => {
+    if (userRole !== 'accountant') return;
+    
+    setHistoricalLoading(true);
+    try {
+      let query = supabase
+        .from('expenses')
+        .select(`
+          id,
+          description,
+          amount,
+          gst_amount,
+          tds_percentage,
+          tds_amount,
+          status,
+          expense_date,
+          correction_reason,
+          correction_requested_at,
+          correction_approved_at,
+          correction_completed_at,
+          is_correction,
+          budget_master!expenses_budget_master_id_fkey (
+            id,
+            item_name,
+            category,
+            committee,
+            annual_budget
+          ),
+          profiles!expenses_claimed_by_fkey (full_name, email)
+        `)
+        .eq('status', 'approved')
+        .gte('expense_date', dateFrom)
+        .lte('expense_date', dateTo);
+
+      // Apply GST/TDS filter
+      if (historicalFilter === 'gst') {
+        query = query.eq('gst_amount', 0);
+      } else if (historicalFilter === 'tds') {
+        query = query.eq('tds_amount', 0);
+      } else if (historicalFilter === 'both') {
+        query = query.or('gst_amount.eq.0,tds_amount.eq.0');
+      }
+
+      const { data, error } = await query.order('expense_date', { ascending: false });
+
+      if (error) throw error;
+      setHistoricalExpenses(data || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading historical expenses',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setHistoricalLoading(false);
     }
   };
 
@@ -306,6 +405,89 @@ export default function Corrections() {
     return labels[action] || action;
   };
 
+  const handleSelectHistorical = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedHistorical);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedHistorical(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedHistorical.size === historicalExpenses.length) {
+      setSelectedHistorical(new Set());
+    } else {
+      setSelectedHistorical(new Set(historicalExpenses.map(e => e.id)));
+    }
+  };
+
+  const handleBulkRequest = () => {
+    const remaining = DAILY_LIMIT - dailyUsage;
+    if (selectedHistorical.size > remaining) {
+      toast({
+        title: 'Daily limit exceeded',
+        description: `You can only request ${remaining} more corrections today. You've selected ${selectedHistorical.size}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShowBulkDialog(true);
+  };
+
+  const handleConfirmBulkRequest = async () => {
+    setBulkSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const updates = Array.from(selectedHistorical).map(id => ({
+        id,
+        status: 'correction_pending',
+        correction_reason: bulkReason,
+        correction_requested_at: new Date().toISOString(),
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('expenses')
+          .update({
+            status: update.status,
+            correction_reason: update.correction_reason,
+            correction_requested_at: update.correction_requested_at,
+          })
+          .eq('id', update.id);
+
+        if (error) throw error;
+
+        // Send notification
+        supabase.functions.invoke('send-expense-notification', {
+          body: { expenseId: update.id, action: 'correction_requested' }
+        }).catch(err => console.error('Email failed:', err));
+      }
+
+      toast({
+        title: 'Correction requests submitted',
+        description: `${selectedHistorical.size} expenses sent for approval`,
+      });
+
+      setSelectedHistorical(new Set());
+      setBulkReason('');
+      setShowBulkDialog(false);
+      await loadHistoricalExpenses();
+      await loadDailyUsage();
+    } catch (error: any) {
+      toast({
+        title: 'Error submitting requests',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -317,98 +499,324 @@ export default function Corrections() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold">Historical Corrections</h1>
+        <h1 className="text-3xl font-bold">Corrections</h1>
         <p className="text-muted-foreground mt-2">
-          Track and manage all expense corrections and their audit trail
+          Track and manage expense corrections, including historical data updates
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Corrections</SelectItem>
-            <SelectItem value="pending">Pending Approval</SelectItem>
-            <SelectItem value="approved">Awaiting Edit</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="text-sm text-muted-foreground">
-          {expenses.length} correction{expenses.length !== 1 ? 's' : ''} found
-        </div>
-      </div>
+      <Tabs defaultValue="workflow" className="w-full">
+        <TabsList>
+          <TabsTrigger value="workflow">Correction Workflow</TabsTrigger>
+          {userRole === 'accountant' && (
+            <TabsTrigger value="historical">Historical Data</TabsTrigger>
+          )}
+        </TabsList>
 
-      {expenses.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No corrections found for the selected filter</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {expenses.map((expense) => (
-            <Card key={expense.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <CardTitle className="text-lg">{expense.description}</CardTitle>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
-                        <span>•</span>
-                        <span>{expense.budget_master?.category}</span>
-                      </div>
-                      {expense.correction_reason && (
-                        <div className="flex items-start gap-2 mt-2">
-                          <span className="font-medium">Reason:</span>
-                          <span className="italic">{expense.correction_reason}</span>
+        <TabsContent value="workflow" className="space-y-6 mt-6">
+
+        <div className="flex items-center gap-4">
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Corrections</SelectItem>
+              <SelectItem value="pending">Pending Approval</SelectItem>
+              <SelectItem value="approved">Awaiting Edit</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="text-sm text-muted-foreground">
+            {expenses.length} correction{expenses.length !== 1 ? 's' : ''} found
+          </div>
+        </div>
+
+        {expenses.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No corrections found for the selected filter</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {expenses.map((expense) => (
+              <Card key={expense.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <CardTitle className="text-lg">{expense.description}</CardTitle>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
+                          <span>•</span>
+                          <span>{expense.budget_master?.category}</span>
                         </div>
-                      )}
+                        {expense.correction_reason && (
+                          <div className="flex items-start gap-2 mt-2">
+                            <span className="font-medium">Reason:</span>
+                            <span className="italic">{expense.correction_reason}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount - (expense.tds_amount || 0)))}</div>
+                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                        <div>Base: {formatCurrency(expense.amount)}</div>
+                        <div>GST: {formatCurrency(expense.gst_amount)}</div>
+                        {expense.tds_amount > 0 && (
+                          <>
+                            <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
+                            <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
+                          </>
+                        )}
+                      </div>
+                      {getStatusBadge(expense)}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount - (expense.tds_amount || 0)))}</div>
-                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                      <div>Base: {formatCurrency(expense.amount)}</div>
-                      <div>GST: {formatCurrency(expense.gst_amount)}</div>
-                      {expense.tds_amount > 0 && (
-                        <>
-                          <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
-                          <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
-                        </>
-                      )}
-                    </div>
-                    {getStatusBadge(expense)}
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewDetails(expense)}
+                  >
+                    {expense.status === 'correction_approved' && userRole === 'accountant' ? (
+                      <>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Expense
+                      </>
+                    ) : (
+                      <>
+                        <History className="h-4 w-4 mr-2" />
+                        View Audit Trail
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+        </TabsContent>
+
+        {userRole === 'accountant' && (
+          <TabsContent value="historical" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Daily Correction Limit</span>
+                  <Badge variant={dailyUsage >= DAILY_LIMIT ? "destructive" : "secondary"}>
+                    {dailyUsage} / {DAILY_LIMIT} used today
+                  </Badge>
+                </CardTitle>
+                <Progress value={(dailyUsage / DAILY_LIMIT) * 100} className="mt-2" />
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Filters</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="date-from">From Date</Label>
+                    <Input
+                      id="date-from"
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date-to">To Date</Label>
+                    <Input
+                      id="date-to"
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-type">Show Expenses With</Label>
+                    <Select value={historicalFilter} onValueChange={setHistoricalFilter}>
+                      <SelectTrigger id="filter-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="both">GST = 0 OR TDS = 0</SelectItem>
+                        <SelectItem value="gst">GST = 0 Only</SelectItem>
+                        <SelectItem value="tds">TDS = 0 Only</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleViewDetails(expense)}
-                >
-                  {expense.status === 'correction_approved' && userRole === 'accountant' ? (
-                    <>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Expense
-                    </>
-                  ) : (
-                    <>
-                      <History className="h-4 w-4 mr-2" />
-                      View Audit Trail
-                    </>
-                  )}
-                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
 
+            {historicalLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>
+                      Historical Expenses ({historicalExpenses.length})
+                    </CardTitle>
+                    {selectedHistorical.size > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          {selectedHistorical.size} selected
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedHistorical(new Set())}
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleBulkRequest}
+                          disabled={dailyUsage >= DAILY_LIMIT}
+                        >
+                          Request Correction
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {historicalExpenses.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No historical expenses found for the selected filters</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={selectedHistorical.size === historicalExpenses.length}
+                              onCheckedChange={handleSelectAll}
+                            />
+                          </TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Budget Item</TableHead>
+                          <TableHead className="text-right">Base</TableHead>
+                          <TableHead className="text-right">GST</TableHead>
+                          <TableHead className="text-right">TDS</TableHead>
+                          <TableHead className="text-right">Net</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {historicalExpenses.map((expense) => (
+                          <TableRow key={expense.id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedHistorical.has(expense.id)}
+                                onCheckedChange={(checked) => 
+                                  handleSelectHistorical(expense.id, checked as boolean)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {new Date(expense.expense_date).toLocaleDateString('en-IN')}
+                            </TableCell>
+                            <TableCell className="text-sm">{expense.description}</TableCell>
+                            <TableCell className="text-sm">
+                              {expense.budget_master?.item_name || 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {formatCurrency(expense.amount)}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {expense.gst_amount === 0 ? (
+                                <Badge variant="destructive" className="text-xs">₹0</Badge>
+                              ) : (
+                                formatCurrency(expense.gst_amount)
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {expense.tds_amount === 0 ? (
+                                <Badge variant="destructive" className="text-xs">₹0</Badge>
+                              ) : (
+                                formatCurrency(expense.tds_amount || 0)
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">
+                              {formatCurrency(expense.amount + expense.gst_amount - (expense.tds_amount || 0))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        )}
+      </Tabs>
+
+      {/* Bulk Request Dialog */}
+      <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Bulk Corrections</DialogTitle>
+            <DialogDescription>
+              You're requesting corrections for {selectedHistorical.size} expense(s).
+              This will use {selectedHistorical.size} of your daily limit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="bulk-reason">Correction Reason *</Label>
+              <Textarea
+                id="bulk-reason"
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="Enter reason for these corrections (e.g., 'GST split required for April-October bulk upload')"
+                rows={3}
+                required
+              />
+            </div>
+            <div className="bg-muted p-3 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                After treasurer approval, these expenses will appear in the "Correction Workflow" tab
+                where you can edit the GST/TDS values.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowBulkDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmBulkRequest} 
+              disabled={!bulkReason.trim() || bulkSubmitting}
+            >
+              {bulkSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Requests'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expense Edit/View Dialog */}
       <Dialog open={!!selectedExpense} onOpenChange={() => { setSelectedExpense(null); setEditMode(false); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
