@@ -81,9 +81,8 @@ export default function Corrections() {
   const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [selectedHistorical, setSelectedHistorical] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState<string>('2024-04-01');
-  const [dateTo, setDateTo] = useState<string>('2024-10-31');
-  const [historicalFilter, setHistoricalFilter] = useState<string>('both');
+  const [dateFrom, setDateFrom] = useState<string>('2025-04-01');
+  const [dateTo, setDateTo] = useState<string>('2025-10-31');
   const [dailyUsage, setDailyUsage] = useState<number>(0);
   const [showBulkDialog, setShowBulkDialog] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
@@ -104,7 +103,7 @@ export default function Corrections() {
     if (userRole === 'accountant') {
       loadHistoricalExpenses();
     }
-  }, [dateFrom, dateTo, historicalFilter, userRole]);
+  }, [dateFrom, dateTo, userRole]);
 
   const loadDailyUsage = async () => {
     try {
@@ -142,7 +141,7 @@ export default function Corrections() {
     
     setHistoricalLoading(true);
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('expenses')
         .select(`
           id,
@@ -169,18 +168,9 @@ export default function Corrections() {
         `)
         .eq('status', 'approved')
         .gte('expense_date', dateFrom)
-        .lte('expense_date', dateTo);
-
-      // Apply GST/TDS filter
-      if (historicalFilter === 'gst') {
-        query = query.eq('gst_amount', 0);
-      } else if (historicalFilter === 'tds') {
-        query = query.eq('tds_amount', 0);
-      } else if (historicalFilter === 'both') {
-        query = query.or('gst_amount.eq.0,tds_amount.eq.0');
-      }
-
-      const { data, error } = await query.order('expense_date', { ascending: false });
+        .lte('expense_date', dateTo)
+        .or('gst_amount.eq.0,tds_amount.eq.0')
+        .order('expense_date', { ascending: false });
 
       if (error) throw error;
       setHistoricalExpenses(data || []);
@@ -621,7 +611,7 @@ export default function Corrections() {
                 <CardTitle>Filters</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="date-from">From Date</Label>
                     <Input
@@ -640,20 +630,10 @@ export default function Corrections() {
                       onChange={(e) => setDateTo(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="filter-type">Show Expenses With</Label>
-                    <Select value={historicalFilter} onValueChange={setHistoricalFilter}>
-                      <SelectTrigger id="filter-type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="both">GST = 0 OR TDS = 0</SelectItem>
-                        <SelectItem value="gst">GST = 0 Only</SelectItem>
-                        <SelectItem value="tds">TDS = 0 Only</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Showing approved expenses with GST = 0 or TDS = 0
+                </p>
               </CardContent>
             </Card>
 
