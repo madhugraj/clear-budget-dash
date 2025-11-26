@@ -91,7 +91,7 @@ export default function Corrections() {
   const { toast } = useToast();
   const { userRole } = useAuth();
 
-  const DAILY_LIMIT = 20;
+  const DAILY_LIMIT = 200;
 
   useEffect(() => {
     loadCorrections();
@@ -152,6 +152,8 @@ export default function Corrections() {
           tds_amount,
           status,
           expense_date,
+          invoice_url,
+          created_at,
           correction_reason,
           correction_requested_at,
           correction_approved_at,
@@ -169,7 +171,6 @@ export default function Corrections() {
         .eq('status', 'approved')
         .gte('expense_date', dateFrom)
         .lte('expense_date', dateTo)
-        .or('gst_amount.eq.0,tds_amount.eq.0')
         .order('expense_date', { ascending: false });
 
       if (error) throw error;
@@ -632,7 +633,7 @@ export default function Corrections() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Showing approved expenses with GST = 0 or TDS = 0
+                  Showing all approved expenses from the selected date range
                 </p>
               </CardContent>
             </Card>
