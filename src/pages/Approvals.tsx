@@ -35,13 +35,35 @@ interface Expense {
   };
 }
 
+interface Income {
+  id: string;
+  fiscal_year: string;
+  month: number;
+  actual_amount: number;
+  gst_amount: number;
+  notes: string | null;
+  status: string;
+  created_at: string;
+  income_categories: {
+    category_name: string;
+    subcategory_name: string | null;
+  };
+  profiles: {
+    full_name: string;
+    email: string;
+  };
+}
+
 export default function Approvals() {
   const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([]);
+  const [pendingIncome, setPendingIncome] = useState<Income[]>([]);
   const [correctionRequests, setCorrectionRequests] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
+  const [selectedIncomeIds, setSelectedIncomeIds] = useState<Set<string>>(new Set());
   const [selectedCorrectionIds, setSelectedCorrectionIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -78,6 +100,45 @@ export default function Approvals() {
 
       if (pendingError) throw pendingError;
 
+      // Fetch pending income
+      const { data: pendingIncomeData, error: incomeError } = await supabase
+        .from('income_actuals')
+        .select(`
+          id,
+          fiscal_year,
+          month,
+          actual_amount,
+          gst_amount,
+          notes,
+          status,
+          created_at,
+          recorded_by,
+          income_categories!income_actuals_category_id_fkey (
+            category_name,
+            subcategory_name
+          )
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (incomeError) throw incomeError;
+
+      // Fetch profile details separately for income
+      const incomeWithProfiles = await Promise.all(
+        (pendingIncomeData || []).map(async (income) => {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', income.recorded_by)
+            .single();
+          
+          return {
+            ...income,
+            profiles: profile || { full_name: 'Unknown', email: '' }
+          };
+        })
+      );
+
       const { data: corrections, error: correctionsError } = await supabase
         .from('expenses')
         .select(`
@@ -106,6 +167,7 @@ export default function Approvals() {
       if (correctionsError) throw correctionsError;
 
       setPendingExpenses(pending || []);
+      setPendingIncome(incomeWithProfiles || []);
       setCorrectionRequests(corrections || []);
     } catch (error: any) {
       toast({
@@ -269,6 +331,96 @@ export default function Approvals() {
     }).catch(err => console.error('Email failed:', err));
   };
 
+  const handleApproveIncome = async (incomeId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('income_actuals')
+      .update({
+        status: 'approved',
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', incomeId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-income-notification', {
+      body: { incomeId, action: 'approved' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkApproveIncome = async (incomeIds: string[]) => {
+    setProcessing(true);
+    try {
+      for (const incomeId of incomeIds) {
+        await handleApproveIncome(incomeId);
+      }
+
+      toast({
+        title: 'Income approved',
+        description: `${incomeIds.length} income entry/entries approved successfully`,
+      });
+
+      setSelectedIncomeIds(new Set());
+      await loadApprovals();
+    } catch (error: any) {
+      toast({
+        title: 'Error approving income',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRejectIncome = async (incomeId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('income_actuals')
+      .update({
+        status: 'rejected',
+        approved_by: user.id,
+      })
+      .eq('id', incomeId);
+
+    if (error) throw error;
+
+    supabase.functions.invoke('send-income-notification', {
+      body: { incomeId, action: 'rejected' }
+    }).catch(err => console.error('Email failed:', err));
+  };
+
+  const handleBulkRejectIncome = async (incomeIds: string[]) => {
+    setProcessing(true);
+    try {
+      for (const incomeId of incomeIds) {
+        await handleRejectIncome(incomeId);
+      }
+
+      toast({
+        title: 'Income rejected',
+        description: `${incomeIds.length} income entry/entries rejected`,
+        variant: 'destructive',
+      });
+
+      setSelectedIncomeIds(new Set());
+      await loadApprovals();
+    } catch (error: any) {
+      toast({
+        title: 'Error rejecting income',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleBulkRejectCorrections = async (expenseIds: string[]) => {
     setProcessing(true);
     try {
@@ -305,6 +457,16 @@ export default function Approvals() {
     setSelectedPendingIds(newSet);
   };
 
+  const toggleIncomeSelection = (id: string) => {
+    const newSet = new Set(selectedIncomeIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIncomeIds(newSet);
+  };
+
   const toggleCorrectionSelection = (id: string) => {
     const newSet = new Set(selectedCorrectionIds);
     if (newSet.has(id)) {
@@ -321,6 +483,14 @@ export default function Approvals() {
 
   const deselectAllPending = () => {
     setSelectedPendingIds(new Set());
+  };
+
+  const selectAllIncome = () => {
+    setSelectedIncomeIds(new Set(pendingIncome.map(i => i.id)));
+  };
+
+  const deselectAllIncome = () => {
+    setSelectedIncomeIds(new Set());
   };
 
   const selectAllCorrections = () => {
@@ -356,17 +526,20 @@ export default function Approvals() {
         </p>
       </div>
 
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="pending">
-            Pending ({pendingExpenses.length})
+      <Tabs defaultValue="expenses" className="w-full">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsTrigger value="expenses">
+            Expenses ({pendingExpenses.length})
+          </TabsTrigger>
+          <TabsTrigger value="income">
+            Income ({pendingIncome.length})
           </TabsTrigger>
           <TabsTrigger value="corrections">
             Corrections ({correctionRequests.length})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pending" className="mt-6">
+        <TabsContent value="expenses" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle>Pending Expense Approvals</CardTitle>
@@ -495,6 +668,193 @@ export default function Approvals() {
                                     onClick={() => setSelectedExpense(expense)}
                                   >
                                     View
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="income" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Income Approvals</CardTitle>
+              <CardDescription>New income entries awaiting approval</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingIncome.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  No pending income approvals
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={selectAllIncome}
+                        disabled={processing}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={deselectAllIncome}
+                        disabled={processing || selectedIncomeIds.size === 0}
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                    {selectedIncomeIds.size > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleBulkRejectIncome(Array.from(selectedIncomeIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Reject ({selectedIncomeIds.size})
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkApproveIncome(Array.from(selectedIncomeIds))}
+                          disabled={processing}
+                        >
+                          {processing ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Approve ({selectedIncomeIds.size})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>Month</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Base Amount</TableHead>
+                          <TableHead>GST</TableHead>
+                          <TableHead className="text-right">Total Amount</TableHead>
+                          <TableHead>Recorded By</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingIncome.map((income) => {
+                          const totalAmount = Number(income.actual_amount) + Number(income.gst_amount);
+                          const monthName = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][income.month];
+                          
+                          return (
+                            <TableRow key={income.id} className={cn(selectedIncomeIds.has(income.id) && "bg-green-50/50")}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedIncomeIds.has(income.id)}
+                                  onCheckedChange={() => toggleIncomeSelection(income.id)}
+                                  disabled={processing}
+                                />
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-sm">
+                                {monthName} {income.fiscal_year}
+                              </TableCell>
+                              <TableCell className="font-medium text-sm">
+                                {income.income_categories.subcategory_name || income.income_categories.category_name}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(Number(income.actual_amount))}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(Number(income.gst_amount))}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                <div className="font-medium">{formatCurrency(totalAmount)}</div>
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {income.profiles.full_name}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedIncome(income)}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={async () => {
+                                      try {
+                                        setProcessing(true);
+                                        await handleRejectIncome(income.id);
+                                        toast({
+                                          title: 'Income rejected',
+                                          description: 'Income entry has been rejected',
+                                          variant: 'destructive',
+                                        });
+                                        await loadApprovals();
+                                      } catch (error: any) {
+                                        toast({
+                                          title: 'Error',
+                                          description: error.message,
+                                          variant: 'destructive',
+                                        });
+                                      } finally {
+                                        setProcessing(false);
+                                      }
+                                    }}
+                                    disabled={processing}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-green-600 hover:text-green-700"
+                                    onClick={async () => {
+                                      try {
+                                        setProcessing(true);
+                                        await handleApproveIncome(income.id);
+                                        toast({
+                                          title: 'Income approved',
+                                          description: 'Income entry has been approved',
+                                        });
+                                        await loadApprovals();
+                                      } catch (error: any) {
+                                        toast({
+                                          title: 'Error',
+                                          description: error.message,
+                                          variant: 'destructive',
+                                        });
+                                      } finally {
+                                        setProcessing(false);
+                                      }
+                                    }}
+                                    disabled={processing}
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
                                   </Button>
                                 </div>
                               </TableCell>
@@ -653,9 +1013,8 @@ export default function Approvals() {
             <DialogTitle>Expense Details</DialogTitle>
             <DialogDescription>Complete information about this expense claim</DialogDescription>
           </DialogHeader>
-          {selectedExpense && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Description</p>
                   <p className="font-medium">{selectedExpense.description}</p>
@@ -716,9 +1075,71 @@ export default function Approvals() {
                 </Button>
               )}
             </div>
-          )}
         </DialogContent>
       </Dialog>
+
+      {selectedIncome && (
+        <Dialog open={!!selectedIncome} onOpenChange={(open) => !open && setSelectedIncome(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Income Details</DialogTitle>
+              <DialogDescription>
+                Review income entry information
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Fiscal Year</p>
+                  <p className="font-medium">{selectedIncome.fiscal_year}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Month</p>
+                  <p className="font-medium">
+                    {['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][selectedIncome.month]}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Category</p>
+                  <p className="font-medium">
+                    {selectedIncome.income_categories.subcategory_name || selectedIncome.income_categories.category_name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Base Amount</p>
+                  <p className="font-medium">{formatCurrency(Number(selectedIncome.actual_amount))}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">GST Amount</p>
+                  <p className="font-medium">{formatCurrency(Number(selectedIncome.gst_amount))}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                  <p className="font-medium text-lg text-primary">
+                    {formatCurrency(Number(selectedIncome.actual_amount) + Number(selectedIncome.gst_amount))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Recorded By</p>
+                  <p className="font-medium">{selectedIncome.profiles.full_name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Submitted</p>
+                  <p className="font-medium">
+                    {new Date(selectedIncome.created_at).toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+              {selectedIncome.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Notes</p>
+                  <p className="font-medium">{selectedIncome.notes}</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
