@@ -277,6 +277,7 @@ export default function Corrections() {
     await loadAuditLogs(expense.id);
 
     // Check if user can edit (accountant or treasurer with correction_approved status)
+    //if (expense.status === "correction_approved" && (userRole === "accountant" || userRole === "treasurer")) {//
     if (expense.status === "correction_approved" && (userRole === "accountant" || userRole === "treasurer")) {
       setEditMode(true);
       setEditAmount(expense.amount.toString());
