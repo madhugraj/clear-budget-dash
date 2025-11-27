@@ -30,7 +30,7 @@ const navigation = [
   { name: 'Add Income', href: '/add-income', icon: Plus, roles: ['accountant', 'treasurer'] },
   { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
-  { name: 'Corrections', href: '/corrections', icon: Edit3, roles: ['accountant'] },
+  { name: 'Corrections', href: '/corrections', icon: Edit3, roles: ['accountant', 'treasurer'] },
   { name: 'User Management', href: '/user-management', icon: UserCog, roles: ['treasurer'] },
   { name: 'Reports', href: '/reports', icon: FileBarChart, roles: ['treasurer', 'accountant', 'lead'] },
   { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
