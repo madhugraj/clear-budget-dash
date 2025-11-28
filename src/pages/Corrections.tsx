@@ -43,6 +43,26 @@ interface Expense {
   };
 }
 
+interface Income {
+  id: string;
+  fiscal_year: string;
+  month: number;
+  actual_amount: number;
+  gst_amount: number;
+  notes: string | null;
+  status: string;
+  created_at: string;
+  income_categories: {
+    id: string;
+    category_name: string;
+    subcategory_name: string | null;
+  } | null;
+  profiles: {
+    full_name: string;
+    email: string;
+  };
+}
+
 interface AuditLog {
   id: string;
   action: string;
@@ -64,7 +84,7 @@ export default function Corrections() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [editMode, setEditMode] = useState(false);
-  
+
   // Edit form states
   const [editAmount, setEditAmount] = useState<string>('');
   const [editGstPercentage, setEditGstPercentage] = useState<number>(18);
@@ -79,6 +99,7 @@ export default function Corrections() {
 
   // Historical Data tab states
   const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
+  const [historicalIncome, setHistoricalIncome] = useState<Income[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [selectedHistorical, setSelectedHistorical] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<string>('2025-04-01');
@@ -87,6 +108,16 @@ export default function Corrections() {
   const [showBulkDialog, setShowBulkDialog] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [historicalType, setHistoricalType] = useState<'expenses' | 'income'>('expenses');
+
+  // Income Edit States
+  const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
+  const [editIncomeMode, setEditIncomeMode] = useState(false);
+  const [editIncomeAmount, setEditIncomeAmount] = useState<string>('');
+  const [editIncomeGstAmount, setEditIncomeGstAmount] = useState<number>(0);
+  const [editIncomeNotes, setEditIncomeNotes] = useState<string>('');
+  const [editIncomeCategory, setEditIncomeCategory] = useState<string>('');
+  const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
 
   const { toast } = useToast();
   const { userRole } = useAuth();
@@ -96,14 +127,19 @@ export default function Corrections() {
   useEffect(() => {
     loadCorrections();
     loadBudgetItems();
+    loadIncomeCategories();
     loadDailyUsage();
   }, [filterStatus]);
 
   useEffect(() => {
     if (userRole === 'accountant' || userRole === 'treasurer') {
-      loadHistoricalExpenses();
+      if (historicalType === 'expenses') {
+        loadHistoricalExpenses();
+      } else {
+        loadHistoricalIncome();
+      }
     }
-  }, [dateFrom, dateTo, userRole]);
+  }, [dateFrom, dateTo, userRole, historicalType]);
 
   const loadDailyUsage = async () => {
     try {
@@ -136,9 +172,24 @@ export default function Corrections() {
     }
   };
 
+  const loadIncomeCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('income_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('category_name');
+
+      if (error) throw error;
+      setIncomeCategories(data || []);
+    } catch (error: any) {
+      console.error('Error loading income categories:', error);
+    }
+  };
+
   const loadHistoricalExpenses = async () => {
     if (userRole !== 'accountant' && userRole !== 'treasurer') return;
-    
+
     setHistoricalLoading(true);
     try {
       const { data, error } = await supabase
@@ -178,6 +229,47 @@ export default function Corrections() {
     } catch (error: any) {
       toast({
         title: 'Error loading historical expenses',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setHistoricalLoading(false);
+    }
+  };
+
+  const loadHistoricalIncome = async () => {
+    if (userRole !== 'accountant' && userRole !== 'treasurer') return;
+
+    setHistoricalLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('income_actuals')
+        .select(`
+          id,
+          fiscal_year,
+          month,
+          actual_amount,
+          gst_amount,
+          notes,
+          status,
+          created_at,
+          income_categories!income_actuals_category_id_fkey (
+            id,
+            category_name,
+            subcategory_name
+          ),
+          profiles!income_actuals_recorded_by_fkey (full_name, email)
+        `)
+        .eq('status', 'approved')
+        .gte('created_at', `${dateFrom}T00:00:00`)
+        .lte('created_at', `${dateTo}T23:59:59`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setHistoricalIncome(data || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading historical income',
         description: error.message,
         variant: 'destructive',
       });
@@ -258,7 +350,7 @@ export default function Corrections() {
             .select('full_name, email')
             .eq('id', log.performed_by)
             .single();
-          
+
           return {
             ...log,
             profiles: profile || { full_name: 'Unknown', email: '' }
@@ -275,7 +367,7 @@ export default function Corrections() {
   const handleViewDetails = async (expense: Expense) => {
     setSelectedExpense(expense);
     await loadAuditLogs(expense.id);
-    
+
     // Check if user can edit (accountant with correction_approved status OR treasurer)
     if ((expense.status === 'correction_approved' && userRole === 'accountant') || userRole === 'treasurer') {
       setEditMode(true);
@@ -286,7 +378,7 @@ export default function Corrections() {
       setEditDescription(expense.description);
       setEditExpenseDate(expense.expense_date);
       setEditBudgetItem(expense.budget_master?.id || '');
-      
+
       // Calculate GST percentage
       if (expense.amount > 0 && expense.gst_amount > 0) {
         const gstPct = (expense.gst_amount / expense.amount) * 100;
@@ -309,7 +401,7 @@ export default function Corrections() {
     setEditDescription(expense.description);
     setEditExpenseDate(expense.expense_date);
     setEditBudgetItem(expense.budget_master?.id || '');
-    
+
     // Calculate GST percentage
     if (expense.amount > 0 && expense.gst_amount > 0) {
       const gstPct = (expense.gst_amount / expense.amount) * 100;
@@ -317,6 +409,15 @@ export default function Corrections() {
     } else {
       setEditGstPercentage(18);
     }
+  };
+
+  const handleTreasurerEditIncome = (income: Income) => {
+    setSelectedIncome(income);
+    setEditIncomeMode(true);
+    setEditIncomeAmount(income.actual_amount.toString());
+    setEditIncomeGstAmount(income.gst_amount);
+    setEditIncomeNotes(income.notes || '');
+    setEditIncomeCategory(income.income_categories?.id || '');
   };
 
   const handleSaveCorrection = async () => {
@@ -387,6 +488,46 @@ export default function Corrections() {
     } catch (error: any) {
       toast({
         title: 'Error saving',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveIncomeCorrection = async () => {
+    if (!selectedIncome) return;
+
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('income_actuals')
+        .update({
+          actual_amount: parseFloat(editIncomeAmount),
+          gst_amount: editIncomeGstAmount,
+          notes: editIncomeNotes,
+          category_id: editIncomeCategory,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedIncome.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Income updated',
+        description: 'The income record has been updated successfully',
+      });
+
+      setSelectedIncome(null);
+      setEditIncomeMode(false);
+      await loadHistoricalIncome();
+    } catch (error: any) {
+      toast({
+        title: 'Error saving income',
         description: error.message,
         variant: 'destructive',
       });
@@ -556,91 +697,91 @@ export default function Corrections() {
 
         <TabsContent value="workflow" className="space-y-6 mt-6">
 
-        <div className="flex items-center gap-4">
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Corrections</SelectItem>
-              <SelectItem value="pending">Pending Approval</SelectItem>
-              <SelectItem value="approved">Awaiting Edit</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="text-sm text-muted-foreground">
-            {expenses.length} correction{expenses.length !== 1 ? 's' : ''} found
+          <div className="flex items-center gap-4">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Corrections</SelectItem>
+                <SelectItem value="pending">Pending Approval</SelectItem>
+                <SelectItem value="approved">Awaiting Edit</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-sm text-muted-foreground">
+              {expenses.length} correction{expenses.length !== 1 ? 's' : ''} found
+            </div>
           </div>
-        </div>
 
-        {expenses.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No corrections found for the selected filter</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4">
-            {expenses.map((expense) => (
-              <Card key={expense.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2 flex-1 min-w-0">
-                      <CardTitle className="text-lg">{expense.description}</CardTitle>
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
-                          <span>•</span>
-                          <span>{expense.budget_master?.category}</span>
-                        </div>
-                        {expense.correction_reason && (
-                          <div className="flex items-start gap-2 mt-2">
-                            <span className="font-medium">Reason:</span>
-                            <span className="italic">{expense.correction_reason}</span>
+          {expenses.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No corrections found for the selected filter</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {expenses.map((expense) => (
+                <Card key={expense.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <CardTitle className="text-lg">{expense.description}</CardTitle>
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{expense.budget_master?.item_name || 'N/A'}</span>
+                            <span>•</span>
+                            <span>{expense.budget_master?.category}</span>
                           </div>
-                        )}
+                          {expense.correction_reason && (
+                            <div className="flex items-start gap-2 mt-2">
+                              <span className="font-medium">Reason:</span>
+                              <span className="italic">{expense.correction_reason}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount - (expense.tds_amount || 0)))}</div>
+                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                          <div>Base: {formatCurrency(expense.amount)}</div>
+                          <div>GST: {formatCurrency(expense.gst_amount)}</div>
+                          {expense.tds_amount > 0 && (
+                            <>
+                              <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
+                              <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
+                            </>
+                          )}
+                        </div>
+                        {getStatusBadge(expense)}
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xl font-bold">{formatCurrency(Number(expense.amount + expense.gst_amount - (expense.tds_amount || 0)))}</div>
-                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                        <div>Base: {formatCurrency(expense.amount)}</div>
-                        <div>GST: {formatCurrency(expense.gst_amount)}</div>
-                        {expense.tds_amount > 0 && (
-                          <>
-                            <div>TDS: -{formatCurrency(expense.tds_amount)}</div>
-                            <div className="font-medium">Net: {formatCurrency(expense.amount + expense.gst_amount - expense.tds_amount)}</div>
-                          </>
-                        )}
-                      </div>
-                      {getStatusBadge(expense)}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewDetails(expense)}
-                  >
-                    {expense.status === 'correction_approved' && userRole === 'accountant' ? (
-                      <>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Expense
-                      </>
-                    ) : (
-                      <>
-                        <History className="h-4 w-4 mr-2" />
-                        View Audit Trail
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewDetails(expense)}
+                    >
+                      {expense.status === 'correction_approved' && userRole === 'accountant' ? (
+                        <>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Expense
+                        </>
+                      ) : (
+                        <>
+                          <History className="h-4 w-4 mr-2" />
+                          View Audit Trail
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {(userRole === 'accountant' || userRole === 'treasurer') && (
@@ -664,7 +805,19 @@ export default function Corrections() {
                 <CardTitle>Filters</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data-type">Data Type</Label>
+                    <Select value={historicalType} onValueChange={(val: any) => setHistoricalType(val)}>
+                      <SelectTrigger id="data-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="expenses">Expenses</SelectItem>
+                        <SelectItem value="income">Income</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="date-from">From Date</Label>
                     <Input
@@ -685,7 +838,7 @@ export default function Corrections() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Showing all approved expenses from the selected date range
+                  Showing all approved {historicalType} from the selected date range
                 </p>
               </CardContent>
             </Card>
@@ -699,9 +852,9 @@ export default function Corrections() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>
-                      Historical Expenses ({historicalExpenses.length})
+                      Historical {historicalType === 'expenses' ? 'Expenses' : 'Income'} ({historicalType === 'expenses' ? historicalExpenses.length : historicalIncome.length})
                     </CardTitle>
-                    {userRole === 'accountant' && selectedHistorical.size > 0 && (
+                    {historicalType === 'expenses' && userRole === 'accountant' && selectedHistorical.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">
                           {selectedHistorical.size} selected
@@ -724,97 +877,167 @@ export default function Corrections() {
                     )}
                     {userRole === 'treasurer' && (
                       <p className="text-sm text-muted-foreground">
-                        Click Edit to directly modify any historical expense
+                        Click Edit to directly modify any historical record
                       </p>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {historicalExpenses.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">No historical expenses found for the selected filters</p>
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {userRole === 'accountant' && (
-                            <TableHead className="w-12">
-                              <Checkbox
-                                checked={selectedHistorical.size === historicalExpenses.length}
-                                onCheckedChange={handleSelectAll}
-                              />
-                            </TableHead>
-                          )}
-                          <TableHead>Date</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Budget Item</TableHead>
-                          <TableHead className="text-right">Base</TableHead>
-                          <TableHead className="text-right">GST</TableHead>
-                          <TableHead className="text-right">TDS</TableHead>
-                          <TableHead className="text-right">Net</TableHead>
-                          {userRole === 'treasurer' && (
-                            <TableHead className="text-center">Actions</TableHead>
-                          )}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {historicalExpenses.map((expense) => (
-                          <TableRow key={expense.id}>
+                  {historicalType === 'expenses' ? (
+                    historicalExpenses.length === 0 ? (
+                      <div className="py-12 text-center">
+                        <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">No historical expenses found for the selected filters</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
                             {userRole === 'accountant' && (
-                              <TableCell>
+                              <TableHead className="w-12">
                                 <Checkbox
-                                  checked={selectedHistorical.has(expense.id)}
-                                  onCheckedChange={(checked) => 
-                                    handleSelectHistorical(expense.id, checked as boolean)
-                                  }
+                                  checked={selectedHistorical.size === historicalExpenses.length}
+                                  onCheckedChange={handleSelectAll}
                                 />
-                              </TableCell>
+                              </TableHead>
                             )}
-                            <TableCell className="text-sm">
-                              {new Date(expense.expense_date).toLocaleDateString('en-IN')}
-                            </TableCell>
-                            <TableCell className="text-sm">{expense.description}</TableCell>
-                            <TableCell className="text-sm">
-                              {expense.budget_master?.item_name || 'N/A'}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              {formatCurrency(expense.amount)}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              {expense.gst_amount === 0 ? (
-                                <Badge variant="destructive" className="text-xs">₹0</Badge>
-                              ) : (
-                                formatCurrency(expense.gst_amount)
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              {expense.tds_amount === 0 ? (
-                                <Badge variant="destructive" className="text-xs">₹0</Badge>
-                              ) : (
-                                formatCurrency(expense.tds_amount || 0)
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-sm font-medium">
-                              {formatCurrency(expense.amount + expense.gst_amount - (expense.tds_amount || 0))}
-                            </TableCell>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Budget Item</TableHead>
+                            <TableHead className="text-right">Base</TableHead>
+                            <TableHead className="text-right">GST</TableHead>
+                            <TableHead className="text-right">TDS</TableHead>
+                            <TableHead className="text-right">Net</TableHead>
                             {userRole === 'treasurer' && (
-                              <TableCell className="text-center">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleTreasurerEdit(expense)}
-                                >
-                                  <Edit className="h-4 w-4 mr-1" />
-                                  Edit
-                                </Button>
-                              </TableCell>
+                              <TableHead className="text-center">Actions</TableHead>
                             )}
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {historicalExpenses.map((expense) => (
+                            <TableRow key={expense.id}>
+                              {userRole === 'accountant' && (
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedHistorical.has(expense.id)}
+                                    onCheckedChange={(checked) =>
+                                      handleSelectHistorical(expense.id, checked as boolean)
+                                    }
+                                  />
+                                </TableCell>
+                              )}
+                              <TableCell className="text-sm">
+                                {new Date(expense.expense_date).toLocaleDateString('en-IN')}
+                              </TableCell>
+                              <TableCell className="text-sm">{expense.description}</TableCell>
+                              <TableCell className="text-sm">
+                                {expense.budget_master?.item_name || 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(expense.amount)}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {expense.gst_amount === 0 ? (
+                                  <Badge variant="destructive" className="text-xs">₹0</Badge>
+                                ) : (
+                                  formatCurrency(expense.gst_amount)
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {expense.tds_amount === 0 ? (
+                                  <Badge variant="destructive" className="text-xs">₹0</Badge>
+                                ) : (
+                                  formatCurrency(expense.tds_amount || 0)
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">
+                                {formatCurrency(expense.amount + expense.gst_amount - (expense.tds_amount || 0))}
+                              </TableCell>
+                              {userRole === 'treasurer' && (
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleTreasurerEdit(expense)}
+                                  >
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )
+                  ) : (
+                    // Income Table
+                    historicalIncome.length === 0 ? (
+                      <div className="py-12 text-center">
+                        <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">No historical income found for the selected filters</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Subcategory</TableHead>
+                            <TableHead>Notes</TableHead>
+                            <TableHead className="text-right">Base</TableHead>
+                            <TableHead className="text-right">GST</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                            {userRole === 'treasurer' && (
+                              <TableHead className="text-center">Actions</TableHead>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {historicalIncome.map((income) => (
+                            <TableRow key={income.id}>
+                              <TableCell className="text-sm">
+                                {new Date(income.created_at).toLocaleDateString('en-IN')}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {income.income_categories?.category_name || 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {income.income_categories?.subcategory_name || '-'}
+                              </TableCell>
+                              <TableCell className="text-sm max-w-[200px] truncate">
+                                {income.notes || '-'}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(income.actual_amount)}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {income.gst_amount === 0 ? (
+                                  <Badge variant="destructive" className="text-xs">₹0</Badge>
+                                ) : (
+                                  formatCurrency(income.gst_amount)
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">
+                                {formatCurrency(income.actual_amount + income.gst_amount)}
+                              </TableCell>
+                              {userRole === 'treasurer' && (
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleTreasurerEditIncome(income)}
+                                  >
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )
                   )}
                 </CardContent>
               </Card>
@@ -856,8 +1079,8 @@ export default function Corrections() {
             <Button variant="outline" onClick={() => setShowBulkDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleConfirmBulkRequest} 
+            <Button
+              onClick={handleConfirmBulkRequest}
               disabled={!bulkReason.trim() || bulkSubmitting}
             >
               {bulkSubmitting ? (
@@ -882,7 +1105,7 @@ export default function Corrections() {
               {editMode ? 'Make the necessary corrections to this expense' : 'Complete audit trail and correction history'}
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedExpense && (
             <div className="space-y-6">
               {editMode ? (
@@ -924,8 +1147,8 @@ export default function Corrections() {
 
                     <div className="space-y-2">
                       <Label htmlFor="edit-gst-pct">GST %</Label>
-                      <Select 
-                        value={editGstPercentage.toString()} 
+                      <Select
+                        value={editGstPercentage.toString()}
                         onValueChange={(val) => setEditGstPercentage(parseInt(val))}
                       >
                         <SelectTrigger id="edit-gst-pct">
@@ -1005,20 +1228,20 @@ export default function Corrections() {
                       <p className="mt-1 font-medium">{selectedExpense.budget_master?.item_name || 'N/A'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Amount</label>
-                      <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount + selectedExpense.gst_amount))}</p>
-                      <p className="text-xs text-muted-foreground space-y-0.5">
-                        <div>Base: {formatCurrency(selectedExpense.amount)}</div>
-                        <div>GST: {formatCurrency(selectedExpense.gst_amount)}</div>
-                        {selectedExpense.tds_amount > 0 && (
-                          <>
-                            <div>TDS: -{formatCurrency(selectedExpense.tds_amount)}</div>
-                            <div className="font-medium mt-1">Net: {formatCurrency(selectedExpense.amount + selectedExpense.gst_amount - selectedExpense.tds_amount)}</div>
-                          </>
-                        )}
-                      </p>
-                    </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Amount</label>
+                        <p className="mt-1 font-semibold">{formatCurrency(Number(selectedExpense.amount + selectedExpense.gst_amount))}</p>
+                        <p className="text-xs text-muted-foreground space-y-0.5">
+                          <div>Base: {formatCurrency(selectedExpense.amount)}</div>
+                          <div>GST: {formatCurrency(selectedExpense.gst_amount)}</div>
+                          {selectedExpense.tds_amount > 0 && (
+                            <>
+                              <div>TDS: -{formatCurrency(selectedExpense.tds_amount)}</div>
+                              <div className="font-medium mt-1">Net: {formatCurrency(selectedExpense.amount + selectedExpense.gst_amount - selectedExpense.tds_amount)}</div>
+                            </>
+                          )}
+                        </p>
+                      </div>
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">Status</label>
                         <div className="mt-1">{getStatusBadge(selectedExpense)}</div>
@@ -1069,6 +1292,92 @@ export default function Corrections() {
                 </>
               )}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Income Edit Dialog */}
+      <Dialog open={!!selectedIncome} onOpenChange={() => { setSelectedIncome(null); setEditIncomeMode(false); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Income</DialogTitle>
+            <DialogDescription>
+              Make changes to this income record.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedIncome && (
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveIncomeCorrection(); }} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-income-category">Category *</Label>
+                <Select value={editIncomeCategory} onValueChange={setEditIncomeCategory} required>
+                  <SelectTrigger id="edit-income-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {incomeCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.category_name} {cat.subcategory_name ? `- ${cat.subcategory_name}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-amount">Base Amount *</Label>
+                  <Input
+                    id="edit-income-amount"
+                    type="number"
+                    step="0.01"
+                    value={editIncomeAmount}
+                    onChange={(e) => setEditIncomeAmount(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-gst">GST Amount</Label>
+                  <Input
+                    id="edit-income-gst"
+                    type="number"
+                    step="0.01"
+                    value={editIncomeGstAmount}
+                    onChange={(e) => setEditIncomeGstAmount(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-income-notes">Notes</Label>
+                <Textarea
+                  id="edit-income-notes"
+                  value={editIncomeNotes}
+                  onChange={(e) => setEditIncomeNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button type="submit" disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => { setSelectedIncome(null); setEditIncomeMode(false); }}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
           )}
         </DialogContent>
       </Dialog>
