@@ -37,12 +37,12 @@ export function ExportIncome() {
         notes,
         status,
         created_at,
+        recorded_by,
+        approved_by,
         income_categories!income_actuals_category_id_fkey (
           category_name,
           subcategory_name
-        ),
-        profiles!income_actuals_recorded_by_fkey (full_name, email),
-        approver:profiles!income_actuals_approved_by_fkey (full_name)
+        )
       `)
             .order('created_at', { ascending: false });
 
@@ -59,15 +59,43 @@ export function ExportIncome() {
             query = query.lte('created_at', format(dateTo, 'yyyy-MM-dd') + 'T23:59:59');
         }
 
-        const { data, error } = await query;
+        const { data: incomeData, error } = await query;
 
         if (error) throw error;
 
-        if (!data || data.length === 0) {
+        if (!incomeData || incomeData.length === 0) {
             throw new Error('No income records match the selected filters');
         }
 
-        return data;
+        // Fetch profiles manually
+        const userIds = new Set<string>();
+        incomeData.forEach((item: any) => {
+            if (item.recorded_by) userIds.add(item.recorded_by);
+            if (item.approved_by) userIds.add(item.approved_by);
+        });
+
+        let profilesMap: Record<string, { full_name: string, email: string }> = {};
+
+        if (userIds.size > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name, email')
+                .in('id', Array.from(userIds));
+
+            if (!profilesError && profilesData) {
+                profilesMap = profilesData.reduce((acc, profile) => {
+                    acc[profile.id] = { full_name: profile.full_name || '', email: profile.email || '' };
+                    return acc;
+                }, {} as Record<string, { full_name: string, email: string }>);
+            }
+        }
+
+        // Combine data
+        return incomeData.map((income: any) => ({
+            ...income,
+            profiles: profilesMap[income.recorded_by] || { full_name: 'Unknown', email: '' },
+            approver: profilesMap[income.approved_by] || { full_name: 'Pending' }
+        }));
     };
 
     const handleView = async () => {

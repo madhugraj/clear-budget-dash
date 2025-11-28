@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, History, Edit, CheckCircle, Calendar, AlertCircle } from 'lucide-react';
+import { Loader2, History, Edit, CheckCircle, Calendar, AlertCircle, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -121,6 +122,15 @@ export default function Corrections() {
   const [editIncomeMonth, setEditIncomeMonth] = useState<number>(4);
   const [editIncomeFiscalYear, setEditIncomeFiscalYear] = useState<string>('FY25-26');
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
+
+  // Delete Confirmation State
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    id: string;
+    type: 'expense' | 'income';
+    description: string;
+  }>({ isOpen: false, id: '', type: 'expense', description: '' });
+  const [deleting, setDeleting] = useState(false);
 
   const { toast } = useToast();
   const { userRole } = useAuth();
@@ -598,6 +608,52 @@ export default function Corrections() {
     }
   };
 
+  const handleDeleteClick = (id: string, type: 'expense' | 'income', description: string) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      id,
+      type,
+      description
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation.id) return;
+
+    setDeleting(true);
+    try {
+      const table = deleteConfirmation.type === 'expense' ? 'expenses' : 'income_actuals';
+
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq('id', deleteConfirmation.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Record deleted',
+        description: `The ${deleteConfirmation.type} record has been deleted successfully.`,
+      });
+
+      setDeleteConfirmation({ ...deleteConfirmation, isOpen: false });
+
+      if (deleteConfirmation.type === 'expense') {
+        await loadHistoricalExpenses();
+      } else {
+        await loadHistoricalIncome();
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Delete failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Auto-calculate GST for Income when amount or percentage changes
   useEffect(() => {
     if (editIncomeAmount && parseFloat(editIncomeAmount) > 0) {
@@ -1036,6 +1092,15 @@ export default function Corrections() {
                                     <Edit className="h-4 w-4 mr-1" />
                                     Edit
                                   </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteClick(expense.id, 'expense', expense.description)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
                                 </TableCell>
                               )}
                             </TableRow>
@@ -1104,6 +1169,15 @@ export default function Corrections() {
                                     <Edit className="h-4 w-4 mr-1" />
                                     Edit
                                   </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteClick(income.id, 'income', income.income_categories?.category_name || 'Income')}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
                                 </TableCell>
                               )}
                             </TableRow>
@@ -1116,11 +1190,12 @@ export default function Corrections() {
               </Card>
             )}
           </TabsContent>
-        )}
-      </Tabs>
+        )
+        }
+      </Tabs >
 
       {/* Bulk Request Dialog */}
-      <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+      < Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Request Bulk Corrections</DialogTitle>
@@ -1167,10 +1242,10 @@ export default function Corrections() {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Expense Edit/View Dialog */}
-      <Dialog open={!!selectedExpense} onOpenChange={() => { setSelectedExpense(null); setEditMode(false); }}>
+      < Dialog open={!!selectedExpense} onOpenChange={() => { setSelectedExpense(null); setEditMode(false); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editMode ? 'Edit Expense' : 'Correction Details'}</DialogTitle>
@@ -1367,10 +1442,10 @@ export default function Corrections() {
             </div>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Income Edit Dialog */}
-      <Dialog open={!!selectedIncome} onOpenChange={() => { setSelectedIncome(null); setEditIncomeMode(false); }}>
+      < Dialog open={!!selectedIncome} onOpenChange={() => { setSelectedIncome(null); setEditIncomeMode(false); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Income</DialogTitle>
@@ -1507,7 +1582,37 @@ export default function Corrections() {
             </form>
           )}
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog >
+      <AlertDialog open={deleteConfirmation.isOpen} onOpenChange={(open) => setDeleteConfirmation({ ...deleteConfirmation, isOpen: open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the {deleteConfirmation.type} record:
+              <span className="font-medium block mt-1">"{deleteConfirmation.description}"</span>
+              <br />
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div >
   );
 }
