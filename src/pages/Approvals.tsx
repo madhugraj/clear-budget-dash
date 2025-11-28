@@ -166,6 +166,12 @@ export default function Approvals() {
 
       if (correctionsError) throw correctionsError;
 
+      // Notify treasurer of new correction requests
+      toast({
+        title: 'Correction Requests Loaded',
+        description: `${corrections?.length || 0} correction request(s) pending approval.`,
+      });
+
       setPendingExpenses(pending || []);
       setPendingIncome(incomeWithProfiles || []);
       setCorrectionRequests(corrections || []);
@@ -527,7 +533,7 @@ export default function Approvals() {
       </div>
 
       <Tabs defaultValue="expenses" className="w-full">
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="expenses">
             Expenses ({pendingExpenses.length})
           </TabsTrigger>
@@ -536,6 +542,9 @@ export default function Approvals() {
           </TabsTrigger>
           <TabsTrigger value="corrections">
             Corrections ({correctionRequests.length})
+          </TabsTrigger>
+          <TabsTrigger value="historical">
+            Historical Data
           </TabsTrigger>
         </TabsList>
 
@@ -679,6 +688,71 @@ export default function Approvals() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historical" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historical Data</CardTitle>
+              <CardDescription>View income, expense, and petty cash history</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Income History */}
+              <h3 className="text-lg font-semibold mb-2">Income History</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingIncome.map((inc) => (
+                    <TableRow key={inc.id}>
+                      <TableCell>{new Date(inc.created_at).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell>{inc.income_categories?.category_name || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(inc.actual_amount) + Number(inc.gst_amount))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {/* Expense History */}
+              <h3 className="text-lg font-semibold mt-4 mb-2">Expense History</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingExpenses.map((exp) => (
+                    <TableRow key={exp.id}>
+                      <TableCell>{new Date(exp.expense_date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell>{exp.budget_master?.item_name || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(exp.amount) + Number(exp.gst_amount))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {/* Petty Cash History */}
+              <h3 className="text-lg font-semibold mt-4 mb-2">Petty Cash History</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {/* Placeholder: fetch petty cash data when available */}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
