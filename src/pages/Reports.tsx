@@ -1,4 +1,5 @@
 import { ExportExpenses } from '@/components/ExportExpenses';
+import { ExportIncome } from '@/components/ExportIncome';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -25,17 +26,7 @@ export default function Reports() {
         </TabsContent>
 
         <TabsContent value="income" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Income Reports</CardTitle>
-              <CardDescription>View and export income data and analysis</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                Income reporting functionality will be available soon.
-              </p>
-            </CardContent>
-          </Card>
+          <ExportIncome />
         </TabsContent>
 
         <TabsContent value="gst" className="mt-6">

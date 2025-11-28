@@ -116,13 +116,13 @@ export function ExportExpenses() {
       const data = await fetchExpenseData();
 
       const doc = new jsPDF('landscape');
-      
+
       doc.setFontSize(16);
       doc.text('Expense Report', 14, 15);
-      
+
       doc.setFontSize(10);
       doc.text(`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 22);
-      
+
       if (status !== 'all') {
         doc.text(`Status: ${status}`, 14, 27);
       }
@@ -176,16 +176,17 @@ export function ExportExpenses() {
       const data = await fetchExpenseData();
 
       // Transform data for export
+      // Transform data for export with proper headers
       const exportData = data.map((expense: any) => ({
-        date: format(new Date(expense.expense_date), 'dd/MM/yyyy'),
-        description: expense.description,
-        category: expense.budget_master?.category || 'N/A',
-        committee: expense.budget_master?.committee || 'N/A',
-        item_name: expense.budget_master?.item_name || 'N/A',
-        amount: Number(expense.amount),
-        status: expense.status,
-        claimed_by: expense.profiles?.full_name || expense.profiles?.email || 'N/A',
-        approved_by: expense.approver?.full_name || undefined,
+        'Date': format(new Date(expense.expense_date), 'dd/MM/yyyy'),
+        'Description': expense.description,
+        'Category': expense.budget_master?.category || 'N/A',
+        'Committee': expense.budget_master?.committee || 'N/A',
+        'Budget Item': expense.budget_master?.item_name || 'N/A',
+        'Amount (₹)': Number(expense.amount),
+        'Status': expense.status,
+        'Claimed By': expense.profiles?.full_name || expense.profiles?.email || 'N/A',
+        'Approved By': expense.approver?.full_name || 'N/A',
       }));
 
       // Export based on format
@@ -328,7 +329,7 @@ export function ExportExpenses() {
               Export to PDF
             </Button>
           </div>
-          
+
           <div className="flex gap-3 flex-wrap">
             <Button
               onClick={() => handleExport('excel')}
@@ -360,90 +361,90 @@ export function ExportExpenses() {
       </Card>
 
       {showView && viewData.length > 0 && (
-      <Card>
-        <CardHeader>
-          <CardTitle>Expense Report ({viewData.length} entries)</CardTitle>
-          <CardDescription>
-            Filtered results based on your criteria
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-[600px] overflow-y-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-muted z-10">
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Base</TableHead>
-                    <TableHead className="text-right">GST</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">TDS</TableHead>
-                    <TableHead className="text-right">Net Payment</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Claimed By</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {viewData.map((row, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="whitespace-nowrap">{row.date}</TableCell>
-                      <TableCell className="font-medium">{row.item_name}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{row.description}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.base_amount)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.gst_amount)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(row.gross_amount)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.tds_amount)}</TableCell>
-                      <TableCell className="text-right font-bold">{formatCurrency(row.net_payment)}</TableCell>
-                      <TableCell>
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
-                          row.status === 'approved' && "bg-green-100 text-green-700",
-                          row.status === 'pending' && "bg-yellow-100 text-yellow-700",
-                          row.status === 'rejected' && "bg-red-100 text-red-700"
-                        )}>
-                          {row.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>{row.claimed_by}</TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle>Expense Report ({viewData.length} entries)</CardTitle>
+            <CardDescription>
+              Filtered results based on your criteria
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-lg overflow-hidden">
+              <div className="max-h-[600px] overflow-y-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted z-10">
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Base</TableHead>
+                      <TableHead className="text-right">GST</TableHead>
+                      <TableHead className="text-right">Gross</TableHead>
+                      <TableHead className="text-right">TDS</TableHead>
+                      <TableHead className="text-right">Net Payment</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Claimed By</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-          
-          <div className="mt-4 p-4 bg-muted rounded-lg">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Total Base</p>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(viewData.reduce((sum, row) => sum + row.base_amount, 0))}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Total GST</p>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(viewData.reduce((sum, row) => sum + row.gst_amount, 0))}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Total TDS</p>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(viewData.reduce((sum, row) => sum + row.tds_amount, 0))}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Total Net Payment</p>
-                <p className="text-lg font-bold text-primary">
-                  {formatCurrency(viewData.reduce((sum, row) => sum + row.net_payment, 0))}
-                </p>
+                  </TableHeader>
+                  <TableBody>
+                    {viewData.map((row, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="whitespace-nowrap">{row.date}</TableCell>
+                        <TableCell className="font-medium">{row.item_name}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{row.description}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.base_amount)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.gst_amount)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(row.gross_amount)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.tds_amount)}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(row.net_payment)}</TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
+                            row.status === 'approved' && "bg-green-100 text-green-700",
+                            row.status === 'pending' && "bg-yellow-100 text-yellow-700",
+                            row.status === 'rejected' && "bg-red-100 text-red-700"
+                          )}>
+                            {row.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>{row.claimed_by}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+
+            <div className="mt-4 p-4 bg-muted rounded-lg">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Total Base</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(viewData.reduce((sum, row) => sum + row.base_amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total GST</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(viewData.reduce((sum, row) => sum + row.gst_amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total TDS</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(viewData.reduce((sum, row) => sum + row.tds_amount, 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total Net Payment</p>
+                  <p className="text-lg font-bold text-primary">
+                    {formatCurrency(viewData.reduce((sum, row) => sum + row.net_payment, 0))}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </>
   );

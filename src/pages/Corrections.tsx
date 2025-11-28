@@ -114,15 +114,33 @@ export default function Corrections() {
   const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
   const [editIncomeMode, setEditIncomeMode] = useState(false);
   const [editIncomeAmount, setEditIncomeAmount] = useState<string>('');
+  const [editIncomeGstPercentage, setEditIncomeGstPercentage] = useState<number>(18);
   const [editIncomeGstAmount, setEditIncomeGstAmount] = useState<number>(0);
   const [editIncomeNotes, setEditIncomeNotes] = useState<string>('');
   const [editIncomeCategory, setEditIncomeCategory] = useState<string>('');
+  const [editIncomeMonth, setEditIncomeMonth] = useState<number>(4);
+  const [editIncomeFiscalYear, setEditIncomeFiscalYear] = useState<string>('FY25-26');
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
 
   const { toast } = useToast();
   const { userRole } = useAuth();
 
   const DAILY_LIMIT = 200;
+
+  const MONTHS = [
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' },
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+  ];
 
   useEffect(() => {
     loadCorrections();
@@ -445,6 +463,21 @@ export default function Corrections() {
     setEditIncomeGstAmount(income.gst_amount);
     setEditIncomeNotes(income.notes || '');
     setEditIncomeCategory(income.income_categories?.id || '');
+    setEditIncomeMonth(income.month);
+    setEditIncomeFiscalYear(income.fiscal_year);
+
+    // Calculate GST percentage
+    if (income.actual_amount > 0 && income.gst_amount > 0) {
+      const gstPct = (income.gst_amount / income.actual_amount) * 100;
+      // Find closest standard GST rate
+      const rates = [0, 5, 12, 18, 28];
+      const closest = rates.reduce((prev, curr) =>
+        Math.abs(curr - gstPct) < Math.abs(prev - gstPct) ? curr : prev
+      );
+      setEditIncomeGstPercentage(closest);
+    } else {
+      setEditIncomeGstPercentage(18);
+    }
   };
 
   const handleSaveCorrection = async () => {
@@ -538,6 +571,8 @@ export default function Corrections() {
           gst_amount: editIncomeGstAmount,
           notes: editIncomeNotes,
           category_id: editIncomeCategory,
+          month: editIncomeMonth,
+          fiscal_year: editIncomeFiscalYear,
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedIncome.id);
@@ -562,6 +597,17 @@ export default function Corrections() {
       setSaving(false);
     }
   };
+
+  // Auto-calculate GST for Income when amount or percentage changes
+  useEffect(() => {
+    if (editIncomeAmount && parseFloat(editIncomeAmount) > 0) {
+      const baseAmount = parseFloat(editIncomeAmount);
+      const gst = (baseAmount * editIncomeGstPercentage) / 100;
+      setEditIncomeGstAmount(Math.round(gst * 100) / 100);
+    } else {
+      setEditIncomeGstAmount(0);
+    }
+  }, [editIncomeAmount, editIncomeGstPercentage]);
 
   // Auto-calculate GST when amount or percentage changes
   useEffect(() => {
@@ -1335,6 +1381,36 @@ export default function Corrections() {
 
           {selectedIncome && (
             <form onSubmit={(e) => { e.preventDefault(); handleSaveIncomeCorrection(); }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-fiscal-year">Fiscal Year</Label>
+                  <Input
+                    id="edit-income-fiscal-year"
+                    value={editIncomeFiscalYear}
+                    onChange={(e) => setEditIncomeFiscalYear(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-month">Month</Label>
+                  <Select
+                    value={editIncomeMonth.toString()}
+                    onValueChange={(val) => setEditIncomeMonth(parseInt(val))}
+                  >
+                    <SelectTrigger id="edit-income-month">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((month) => (
+                        <SelectItem key={month.value} value={month.value.toString()}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="edit-income-category">Category *</Label>
                 <Select value={editIncomeCategory} onValueChange={setEditIncomeCategory} required>
@@ -1365,14 +1441,38 @@ export default function Corrections() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-income-gst">GST Amount</Label>
-                  <Input
-                    id="edit-income-gst"
-                    type="number"
-                    step="0.01"
-                    value={editIncomeGstAmount}
-                    onChange={(e) => setEditIncomeGstAmount(parseFloat(e.target.value) || 0)}
-                  />
+                  <Label htmlFor="edit-income-gst-pct">GST %</Label>
+                  <Select
+                    value={editIncomeGstPercentage.toString()}
+                    onValueChange={(val) => setEditIncomeGstPercentage(parseFloat(val))}
+                  >
+                    <SelectTrigger id="edit-income-gst-pct">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="5">5%</SelectItem>
+                      <SelectItem value="12">12%</SelectItem>
+                      <SelectItem value="18">18%</SelectItem>
+                      <SelectItem value="28">28%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Amounts (Auto-calculated)</Label>
+                <div className="grid grid-cols-2 gap-4 text-sm bg-muted p-3 rounded-md">
+                  <div>
+                    <span className="text-muted-foreground">GST Amount:</span>
+                    <p className="font-medium">{formatCurrency(editIncomeGstAmount)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Net Amount:</span>
+                    <p className="font-bold text-primary">
+                      {formatCurrency((parseFloat(editIncomeAmount) || 0) + editIncomeGstAmount)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
