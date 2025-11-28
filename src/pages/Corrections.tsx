@@ -121,6 +121,7 @@ export default function Corrections() {
   const [editIncomeCategory, setEditIncomeCategory] = useState<string>('');
   const [editIncomeMonth, setEditIncomeMonth] = useState<number>(4);
   const [editIncomeFiscalYear, setEditIncomeFiscalYear] = useState<string>('FY25-26');
+  const [editIncomeDate, setEditIncomeDate] = useState<string>('');
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
 
   // Delete Confirmation State
@@ -475,6 +476,7 @@ export default function Corrections() {
     setEditIncomeCategory(income.income_categories?.id || '');
     setEditIncomeMonth(income.month);
     setEditIncomeFiscalYear(income.fiscal_year);
+    setEditIncomeDate(income.created_at.split('T')[0]);
 
     // Calculate GST percentage
     if (income.actual_amount > 0 && income.gst_amount > 0) {
@@ -574,6 +576,14 @@ export default function Corrections() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Calculate FY and Month from date
+      const date = new Date(editIncomeDate);
+      const month = date.getMonth() + 1; // 1-12
+      const year = date.getFullYear();
+      const fyStart = month >= 4 ? year : year - 1;
+      const fyEnd = fyStart + 1;
+      const fiscalYear = `FY${fyStart.toString().slice(-2)}-${fyEnd.toString().slice(-2)}`;
+
       const { error } = await supabase
         .from('income_actuals')
         .update({
@@ -581,8 +591,9 @@ export default function Corrections() {
           gst_amount: editIncomeGstAmount,
           notes: editIncomeNotes,
           category_id: editIncomeCategory,
-          month: editIncomeMonth,
-          fiscal_year: editIncomeFiscalYear,
+          month: month,
+          fiscal_year: fiscalYear,
+          created_at: `${editIncomeDate}T12:00:00`, // Set to noon to avoid timezone issues
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedIncome.id);
@@ -1456,34 +1467,15 @@ export default function Corrections() {
 
           {selectedIncome && (
             <form onSubmit={(e) => { e.preventDefault(); handleSaveIncomeCorrection(); }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-income-fiscal-year">Fiscal Year</Label>
-                  <Input
-                    id="edit-income-fiscal-year"
-                    value={editIncomeFiscalYear}
-                    onChange={(e) => setEditIncomeFiscalYear(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-income-month">Month</Label>
-                  <Select
-                    value={editIncomeMonth.toString()}
-                    onValueChange={(val) => setEditIncomeMonth(parseInt(val))}
-                  >
-                    <SelectTrigger id="edit-income-month">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MONTHS.map((month) => (
-                        <SelectItem key={month.value} value={month.value.toString()}>
-                          {month.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-income-date">Date *</Label>
+                <Input
+                  id="edit-income-date"
+                  type="date"
+                  value={editIncomeDate}
+                  onChange={(e) => setEditIncomeDate(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="space-y-2">
