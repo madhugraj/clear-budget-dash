@@ -47,7 +47,7 @@ interface Income {
   income_categories: {
     category_name: string;
     subcategory_name: string | null;
-  };
+  } | null;
   profiles: {
     full_name: string;
     email: string;
@@ -761,12 +761,12 @@ export default function Approvals() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {pendingIncome.map((income) => {
+                      {pendingIncome.map((income) => {
                           const totalAmount = Number(income.actual_amount) + Number(income.gst_amount);
                           const monthName = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][income.month];
                           
                           return (
-                            <TableRow key={income.id} className={cn(selectedIncomeIds.has(income.id) && "bg-green-50/50")}>
+                            <TableRow key={income.id} className={cn(selectedIncomeIds.has(income.id) && "bg-muted/50")}>
                               <TableCell>
                                 <Checkbox
                                   checked={selectedIncomeIds.has(income.id)}
@@ -778,7 +778,7 @@ export default function Approvals() {
                                 {monthName} {income.fiscal_year}
                               </TableCell>
                               <TableCell className="font-medium text-sm">
-                                {income.income_categories.subcategory_name || income.income_categories.category_name}
+                                {income.income_categories?.subcategory_name || income.income_categories?.category_name || 'N/A'}
                               </TableCell>
                               <TableCell className="text-right text-sm">
                                 {formatCurrency(Number(income.actual_amount))}
@@ -1102,7 +1102,7 @@ export default function Approvals() {
                 <div>
                   <p className="text-sm text-muted-foreground">Category</p>
                   <p className="font-medium">
-                    {selectedIncome.income_categories.subcategory_name || selectedIncome.income_categories.category_name}
+                    {selectedIncome.income_categories?.subcategory_name || selectedIncome.income_categories?.category_name || 'N/A'}
                   </p>
                 </div>
                 <div>
