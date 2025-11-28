@@ -941,6 +941,7 @@ export default function Approvals() {
                           <TableHead>Date</TableHead>
                           <TableHead>Item</TableHead>
                           <TableHead>Description</TableHead>
+                          <TableHead>Requested By</TableHead>
                           <TableHead>Reason</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                           <TableHead className="text-center">Actions</TableHead>
@@ -967,6 +968,9 @@ export default function Approvals() {
                               </TableCell>
                               <TableCell className="max-w-[200px] truncate text-sm">
                                 {expense.description}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {expense.profiles?.full_name || expense.profiles?.email || 'N/A'}
                               </TableCell>
                               <TableCell className="max-w-[200px] truncate text-sm">
                                 {expense.correction_reason || 'N/A'}

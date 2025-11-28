@@ -100,7 +100,7 @@ export default function Corrections() {
   }, [filterStatus]);
 
   useEffect(() => {
-    if (userRole === 'accountant') {
+    if (userRole === 'accountant' || userRole === 'treasurer') {
       loadHistoricalExpenses();
     }
   }, [dateFrom, dateTo, userRole]);
@@ -137,7 +137,7 @@ export default function Corrections() {
   };
 
   const loadHistoricalExpenses = async () => {
-    if (userRole !== 'accountant') return;
+    if (userRole !== 'accountant' && userRole !== 'treasurer') return;
     
     setHistoricalLoading(true);
     try {
@@ -276,8 +276,8 @@ export default function Corrections() {
     setSelectedExpense(expense);
     await loadAuditLogs(expense.id);
     
-    // Check if user can edit (accountant with correction_approved status)
-    if (expense.status === 'correction_approved' && userRole === 'accountant') {
+    // Check if user can edit (accountant with correction_approved status OR treasurer)
+    if ((expense.status === 'correction_approved' && userRole === 'accountant') || userRole === 'treasurer') {
       setEditMode(true);
       setEditAmount(expense.amount.toString());
       setEditGstAmount(expense.gst_amount);
@@ -297,6 +297,28 @@ export default function Corrections() {
     }
   };
 
+  // Treasurer direct edit for historical data
+  const handleTreasurerEdit = async (expense: Expense) => {
+    setSelectedExpense(expense);
+    await loadAuditLogs(expense.id);
+    setEditMode(true);
+    setEditAmount(expense.amount.toString());
+    setEditGstAmount(expense.gst_amount);
+    setEditTdsPercentage(expense.tds_percentage || 0);
+    setEditTdsAmount(expense.tds_amount || 0);
+    setEditDescription(expense.description);
+    setEditExpenseDate(expense.expense_date);
+    setEditBudgetItem(expense.budget_master?.id || '');
+    
+    // Calculate GST percentage
+    if (expense.amount > 0 && expense.gst_amount > 0) {
+      const gstPct = (expense.gst_amount / expense.amount) * 100;
+      setEditGstPercentage(Math.round(gstPct));
+    } else {
+      setEditGstPercentage(18);
+    }
+  };
+
   const handleSaveCorrection = async () => {
     if (!selectedExpense) return;
 
@@ -305,38 +327,66 @@ export default function Corrections() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          amount: parseFloat(editAmount),
-          gst_amount: editGstAmount,
-          description: editDescription,
-          expense_date: editExpenseDate,
-          budget_master_id: editBudgetItem,
-          status: 'approved', // Change back to approved after editing
-          correction_completed_at: new Date().toISOString(),
-          is_correction: true,
-        })
-        .eq('id', selectedExpense.id);
+      // Treasurer direct edit - just update the values, keep status as approved
+      if (userRole === 'treasurer') {
+        const { error } = await supabase
+          .from('expenses')
+          .update({
+            amount: parseFloat(editAmount),
+            gst_amount: editGstAmount,
+            tds_percentage: editTdsPercentage,
+            tds_amount: editTdsAmount,
+            description: editDescription,
+            expense_date: editExpenseDate,
+            budget_master_id: editBudgetItem,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', selectedExpense.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Send notification to treasurer
-      supabase.functions.invoke('send-expense-notification', {
-        body: { expenseId: selectedExpense.id, action: 'correction_completed' }
-      }).then(() => console.log('Correction completion email sent')).catch(err => console.error('Email failed:', err));
+        toast({
+          title: 'Expense updated',
+          description: 'The expense has been updated successfully',
+        });
+      } else {
+        // Accountant correction flow
+        const { error } = await supabase
+          .from('expenses')
+          .update({
+            amount: parseFloat(editAmount),
+            gst_amount: editGstAmount,
+            tds_percentage: editTdsPercentage,
+            tds_amount: editTdsAmount,
+            description: editDescription,
+            expense_date: editExpenseDate,
+            budget_master_id: editBudgetItem,
+            status: 'approved', // Change back to approved after editing
+            correction_completed_at: new Date().toISOString(),
+            is_correction: true,
+          })
+          .eq('id', selectedExpense.id);
 
-      toast({
-        title: 'Correction saved',
-        description: 'The expense has been updated successfully',
-      });
+        if (error) throw error;
+
+        // Send notification to treasurer
+        supabase.functions.invoke('send-expense-notification', {
+          body: { expenseId: selectedExpense.id, action: 'correction_completed' }
+        }).then(() => console.log('Correction completion email sent')).catch(err => console.error('Email failed:', err));
+
+        toast({
+          title: 'Correction saved',
+          description: 'The expense has been updated successfully',
+        });
+      }
 
       setSelectedExpense(null);
       setEditMode(false);
       await loadCorrections();
+      await loadHistoricalExpenses();
     } catch (error: any) {
       toast({
-        title: 'Error saving correction',
+        title: 'Error saving',
         description: error.message,
         variant: 'destructive',
       });
@@ -499,7 +549,7 @@ export default function Corrections() {
       <Tabs defaultValue="workflow" className="w-full">
         <TabsList>
           <TabsTrigger value="workflow">Correction Workflow</TabsTrigger>
-          {userRole === 'accountant' && (
+          {(userRole === 'accountant' || userRole === 'treasurer') && (
             <TabsTrigger value="historical">Historical Data</TabsTrigger>
           )}
         </TabsList>
@@ -593,19 +643,21 @@ export default function Corrections() {
         )}
         </TabsContent>
 
-        {userRole === 'accountant' && (
+        {(userRole === 'accountant' || userRole === 'treasurer') && (
           <TabsContent value="historical" className="space-y-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Daily Correction Limit</span>
-                  <Badge variant={dailyUsage >= DAILY_LIMIT ? "destructive" : "secondary"}>
-                    {dailyUsage} / {DAILY_LIMIT} used today
-                  </Badge>
-                </CardTitle>
-                <Progress value={(dailyUsage / DAILY_LIMIT) * 100} className="mt-2" />
-              </CardHeader>
-            </Card>
+            {userRole === 'accountant' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Daily Correction Limit</span>
+                    <Badge variant={dailyUsage >= DAILY_LIMIT ? "destructive" : "secondary"}>
+                      {dailyUsage} / {DAILY_LIMIT} used today
+                    </Badge>
+                  </CardTitle>
+                  <Progress value={(dailyUsage / DAILY_LIMIT) * 100} className="mt-2" />
+                </CardHeader>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -649,7 +701,7 @@ export default function Corrections() {
                     <CardTitle>
                       Historical Expenses ({historicalExpenses.length})
                     </CardTitle>
-                    {selectedHistorical.size > 0 && (
+                    {userRole === 'accountant' && selectedHistorical.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">
                           {selectedHistorical.size} selected
@@ -670,6 +722,11 @@ export default function Corrections() {
                         </Button>
                       </div>
                     )}
+                    {userRole === 'treasurer' && (
+                      <p className="text-sm text-muted-foreground">
+                        Click Edit to directly modify any historical expense
+                      </p>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -682,12 +739,14 @@ export default function Corrections() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-12">
-                            <Checkbox
-                              checked={selectedHistorical.size === historicalExpenses.length}
-                              onCheckedChange={handleSelectAll}
-                            />
-                          </TableHead>
+                          {userRole === 'accountant' && (
+                            <TableHead className="w-12">
+                              <Checkbox
+                                checked={selectedHistorical.size === historicalExpenses.length}
+                                onCheckedChange={handleSelectAll}
+                              />
+                            </TableHead>
+                          )}
                           <TableHead>Date</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead>Budget Item</TableHead>
@@ -695,19 +754,24 @@ export default function Corrections() {
                           <TableHead className="text-right">GST</TableHead>
                           <TableHead className="text-right">TDS</TableHead>
                           <TableHead className="text-right">Net</TableHead>
+                          {userRole === 'treasurer' && (
+                            <TableHead className="text-center">Actions</TableHead>
+                          )}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {historicalExpenses.map((expense) => (
                           <TableRow key={expense.id}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedHistorical.has(expense.id)}
-                                onCheckedChange={(checked) => 
-                                  handleSelectHistorical(expense.id, checked as boolean)
-                                }
-                              />
-                            </TableCell>
+                            {userRole === 'accountant' && (
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedHistorical.has(expense.id)}
+                                  onCheckedChange={(checked) => 
+                                    handleSelectHistorical(expense.id, checked as boolean)
+                                  }
+                                />
+                              </TableCell>
+                            )}
                             <TableCell className="text-sm">
                               {new Date(expense.expense_date).toLocaleDateString('en-IN')}
                             </TableCell>
@@ -735,6 +799,18 @@ export default function Corrections() {
                             <TableCell className="text-right text-sm font-medium">
                               {formatCurrency(expense.amount + expense.gst_amount - (expense.tds_amount || 0))}
                             </TableCell>
+                            {userRole === 'treasurer' && (
+                              <TableCell className="text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTreasurerEdit(expense)}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                       </TableBody>
