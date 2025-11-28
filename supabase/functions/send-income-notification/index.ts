@@ -26,18 +26,30 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch income details with category information
+    // Note: recorded_by relationship might be missing in schema, so we fetch profile separately
     const { data: income, error: incomeError } = await supabase
       .from('income_actuals')
       .select(`
         *,
-        category:income_categories!income_actuals_category_id_fkey(category_name, subcategory_name),
-        recorder:profiles!income_actuals_recorded_by_fkey(full_name, email)
+        category:income_categories!income_actuals_category_id_fkey(category_name, subcategory_name)
       `)
       .eq('id', incomeId)
       .single();
 
     if (incomeError || !income) {
+      console.error('Error fetching income:', incomeError);
       throw new Error('Failed to fetch income details');
+    }
+
+    // Fetch recorder profile
+    let recorderProfile = null;
+    if (income.recorded_by) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', income.recorded_by)
+        .single();
+      recorderProfile = profile;
     }
 
     // Fetch all treasurers
@@ -87,7 +99,7 @@ Deno.serve(async (req) => {
     });
 
     const actionText = action === 'created' ? 'added' : 'updated';
-    const recorderName = income.recorder?.full_name || income.recorder?.email || 'An accountant';
+    const recorderName = recorderProfile?.full_name || recorderProfile?.email || 'An accountant';
 
     // Compose email
     const emailSubject = `Income Record ${action === 'created' ? 'Added' : 'Updated'} - ${categoryName}`;
