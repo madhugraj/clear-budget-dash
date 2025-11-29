@@ -22,6 +22,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { NotificationBell } from '@/components/NotificationBell';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['treasurer', 'accountant', 'general', 'lead'] },
@@ -109,16 +110,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </Sheet>
           )}
           <h1 className="text-lg font-semibold">Expense Manager</h1>
-          {!user && (
-            <Button 
-              variant="default" 
-              size="sm"
-              onClick={() => navigate('/auth')}
-            >
-              <LogIn className="mr-2 h-4 w-4" />
-              Login
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {user && <NotificationBell />}
+            {!user && (
+              <Button 
+                variant="default" 
+                size="sm"
+                onClick={() => navigate('/auth')}
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                Login
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -144,7 +148,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
           <div className="flex flex-col h-full">
             <div className="p-6 border-b">
-              <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
+                <NotificationBell />
+              </div>
               {userRole && (
                 <p className="text-sm text-muted-foreground mt-1 capitalize">
                   {userRole === 'treasurer' ? 'Admin' : userRole}
