@@ -142,7 +142,7 @@ export default function Dashboard() {
       // Process monthly data
       const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
       const monthlyMap: Record<string, number> = {};
-      
+
       monthlyExpenses?.forEach(exp => {
         const month = new Date(exp.expense_date).toLocaleString('en-US', { month: 'short' });
         monthlyMap[month] = (monthlyMap[month] || 0) + Number(exp.amount) + Number(exp.gst_amount || 0);
@@ -179,13 +179,13 @@ export default function Dashboard() {
       const itemMap: Record<string, { amount: number; budget: number; category: string; committee: string }> = {};
       const categoriesSet = new Set<string>();
       const committeesSet = new Set<string>();
-      
+
       itemExpenses?.forEach((exp: any) => {
         const itemName = exp.budget_master?.item_name;
         const budget = exp.budget_master?.annual_budget || 0;
         const category = exp.budget_master?.category || '';
         const committee = exp.budget_master?.committee || '';
-        
+
         if (itemName) {
           if (!itemMap[itemName]) {
             itemMap[itemName] = { amount: 0, budget: Number(budget), category, committee };
@@ -281,7 +281,7 @@ export default function Dashboard() {
       // Process monthly income data (merge base + GST)
       const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
       const monthlyActuals: Record<number, number> = {};
-      
+
       actualData?.forEach(actual => {
         const monthIndex = actual.month - 4; // Apr = 4, convert to 0-indexed
         if (monthIndex >= 0 && monthIndex < 7) {
@@ -303,7 +303,7 @@ export default function Dashboard() {
 
       // Process category-wise income data (merge base + GST)
       const categoryMap: Record<string, { budget: number; actual: number }> = {};
-      
+
       parentCategories.forEach(category => {
         const budget = budgetData?.find(b => b.category_id === category.id);
         const actuals = actualData?.filter(a => a.category_id === category.id);
@@ -311,7 +311,7 @@ export default function Dashboard() {
           const totalIncome = Number(a.actual_amount) + Number(a.gst_amount || 0);
           return sum + totalIncome;
         }, 0) || 0;
-        
+
         categoryMap[category.category_name] = {
           budget: Number(budget?.budgeted_amount || 0),
           actual: totalActual,
@@ -366,7 +366,7 @@ export default function Dashboard() {
           <p className="text-xl md:text-2xl font-light text-foreground/80 mb-6">
             Expense Management System
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm">
             {userRole && (
               <div className="flex items-center gap-2">
@@ -374,6 +374,7 @@ export default function Dashboard() {
                 <span className="text-muted-foreground">
                   {userRole === 'treasurer' && 'Full system access'}
                   {userRole === 'accountant' && 'Can add expenses'}
+                  {userRole === 'lead' && 'Can manage petty cash'}
                   {userRole === 'general' && 'View-only access'}
                 </span>
               </div>
@@ -384,7 +385,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        
+
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-0"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl -z-0"></div>
@@ -392,15 +393,15 @@ export default function Dashboard() {
 
       {/* Budget Meter - Hero Section */}
       <div className="animate-[fade-in_0.6s_ease-out_0.2s_both]">
-        <BudgetMeter 
-          budget={stats?.totalBudget || 0} 
+        <BudgetMeter
+          budget={stats?.totalBudget || 0}
           spent={stats?.totalExpenses || 0}
         />
       </div>
 
       {/* Over Budget Alert */}
       <div className="animate-[fade-in_0.6s_ease-out_0.3s_both]">
-        <OverBudgetAlert 
+        <OverBudgetAlert
           items={allItemData
             .filter(item => {
               const proratedBudget = (item.budget * 7) / 12; // 7 months elapsed (Apr-Oct)
@@ -411,8 +412,8 @@ export default function Dashboard() {
               budget: (item.budget * 7) / 12, // Show prorated budget
               actual: item.amount,
               overAmount: item.amount - ((item.budget * 7) / 12),
-              utilization: ((item.budget * 7) / 12) > 0 
-                ? (item.amount / ((item.budget * 7) / 12)) * 100 
+              utilization: ((item.budget * 7) / 12) > 0
+                ? (item.amount / ((item.budget * 7) / 12)) * 100
                 : 0,
               category: item.category,
               committee: item.committee,
@@ -459,12 +460,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card 
-          className={`border-none shadow-none bg-gradient-to-br from-card to-warning/5 hover:shadow-md transition-all ${
-            userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0
+        <Card
+          className={`border-none shadow-none bg-gradient-to-br from-card to-warning/5 hover:shadow-md transition-all ${userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0
               ? 'cursor-pointer ring-2 ring-warning/30 animate-pulse hover:ring-warning/50'
               : ''
-          }`}
+            }`}
           onClick={() => {
             if (userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0) {
               window.location.href = '/approvals';
@@ -477,14 +477,13 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-lg md:text-xl font-semibold break-words ${
-              stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'text-warning' : ''
-            }`}>
+            <div className={`text-lg md:text-xl font-semibold break-words ${stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'text-warning' : ''
+              }`}>
               {stats?.pendingApprovals || 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 
-                ? 'Click to review' 
+              {userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0
+                ? 'Click to review'
                 : 'Awaiting review'}
             </p>
           </CardContent>
@@ -495,9 +494,9 @@ export default function Dashboard() {
       <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-semibold text-foreground">Financial Analysis</h2>
-          <Button 
-            onClick={refreshCharts} 
-            variant="outline" 
+          <Button
+            onClick={refreshCharts}
+            variant="outline"
             size="sm"
             className="gap-2"
           >
@@ -505,13 +504,13 @@ export default function Dashboard() {
             Refresh Charts
           </Button>
         </div>
-        
+
         <Tabs defaultValue="expense" className="w-full">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
             <TabsTrigger value="expense">Expense</TabsTrigger>
             <TabsTrigger value="income">Income</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="expense" className="space-y-6 mt-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="w-full overflow-hidden">
@@ -524,9 +523,9 @@ export default function Dashboard() {
               <div className="w-full overflow-hidden">
                 <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
                   <CardContent className="p-0">
-                    <ItemWiseExpenseChart 
+                    <ItemWiseExpenseChart
                       key={`item-${chartKey}`}
-                      data={itemData} 
+                      data={itemData}
                       allCategories={allCategories}
                       allCommittees={allCommittees}
                       onCategoryChange={handleCategoryFilter}
@@ -539,7 +538,7 @@ export default function Dashboard() {
 
             {/* Item-wise Budget Analysis */}
             <div className="w-full">
-              <ItemAnalysisCard 
+              <ItemAnalysisCard
                 items={allItemData.map(item => ({
                   item_name: item.item_name,
                   full_item_name: item.full_item_name,
@@ -550,11 +549,11 @@ export default function Dashboard() {
                   committee: item.committee,
                   monthsElapsed: 7, // Apr - Oct 2025
                   monthsRemaining: 5, // Nov - Mar 2026
-                }))} 
+                }))}
               />
             </div>
           </TabsContent>
-          
+
           <TabsContent value="income" className="space-y-6 mt-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="w-full overflow-hidden">
@@ -567,7 +566,7 @@ export default function Dashboard() {
               <div className="w-full overflow-hidden">
                 <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-3/5">
                   <CardContent className="p-0">
-                    <CategoryWiseIncomeChart 
+                    <CategoryWiseIncomeChart
                       key={`category-income-${chartKey}`}
                       data={categoryIncomeData}
                     />

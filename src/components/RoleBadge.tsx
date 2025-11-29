@@ -1,8 +1,8 @@
 import { Badge } from '@/components/ui/badge';
-import { Shield, UserCheck, Eye } from 'lucide-react';
+import { Shield, UserCheck, Eye, Wallet } from 'lucide-react';
 
 interface RoleBadgeProps {
-  role: 'treasurer' | 'accountant' | 'general';
+  role: 'treasurer' | 'accountant' | 'lead' | 'general';
   size?: 'sm' | 'default' | 'lg';
 }
 
@@ -19,6 +19,12 @@ export function RoleBadge({ role, size = 'default' }: RoleBadgeProps) {
       icon: UserCheck,
       variant: 'secondary' as const,
       color: 'bg-secondary text-secondary-foreground',
+    },
+    lead: {
+      label: 'Lead',
+      icon: Wallet,
+      variant: 'secondary' as const,
+      color: 'bg-accent text-accent-foreground',
     },
     general: {
       label: 'Viewer',
