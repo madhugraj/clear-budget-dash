@@ -63,10 +63,12 @@ export function NotificationBell() {
         .eq('status', 'correction_pending');
 
       // Fetch pending petty cash count
-      const { count: pettyCashCount } = await supabase
+      const { count: pettyCashCount, error: pettyCashError } = await supabase
         .from('petty_cash')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
+      
+      console.log('Petty cash notification count:', pettyCashCount, 'Error:', pettyCashError);
 
       setCounts({
         pendingExpenses: expenseCount || 0,
