@@ -37,18 +37,18 @@ export default function BudgetUpload() {
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      
+
       // Look for "Summary-FOR WHOLE YEAR" sheet
-      let sheetName = workbook.SheetNames.find(name => 
-        name.toLowerCase().includes('summary') && 
+      let sheetName = workbook.SheetNames.find(name =>
+        name.toLowerCase().includes('summary') &&
         name.toLowerCase().includes('whole year')
       ) || workbook.SheetNames[0];
-      
+
       const worksheet = workbook.Sheets[sheetName];
-      
+
       // Get all data without skipping rows first, to find the header row
       const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-      
+
       // Find the header row (looking for "SL.NO", "ITEM", "CATEGORY", "COMMITTEE")
       let headerRowIndex = -1;
       for (let i = 0; i < allData.length; i++) {
@@ -58,15 +58,15 @@ export default function BudgetUpload() {
           break;
         }
       }
-      
+
       if (headerRowIndex === -1) {
         throw new Error('Could not find header row with SL.NO, ITEM, CATEGORY columns');
       }
-      
+
       // Parse data starting after the header row
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
         range: headerRowIndex + 1,
-        defval: '' 
+        defval: ''
       });
 
       // Helper function to clean currency values
@@ -81,17 +81,17 @@ export default function BudgetUpload() {
         .map((row: any) => {
           // Get serial number - could be in SL.NO or column 1
           const serialNo = parseInt(String(row['SL.NO'] || row['1'] || '0'));
-          
+
           // Skip if serial number is invalid or this is a total row
           const itemName = String(row['ITEM'] || row['2'] || '').trim();
           if (!serialNo || serialNo === 0 || !itemName) return null;
-          if (itemName.toLowerCase().includes('total') || 
-              itemName.toLowerCase().includes('per annum')) return null;
-          
+          if (itemName.toLowerCase().includes('total') ||
+            itemName.toLowerCase().includes('per annum')) return null;
+
           // Extract annual and monthly budgets (columns 5 and 6)
           const annualBudget = cleanCurrency(row['AMOUNT WITH TAX'] || row['5']);
           const monthlyBudget = cleanCurrency(row['AMOUNT WITH TAX__1'] || row['6']);
-          
+
           return {
             serial_no: serialNo,
             item_name: itemName,
@@ -106,7 +106,7 @@ export default function BudgetUpload() {
       setPreview(budgetRows);
       // Select all items by default
       setSelectedItems(new Set(budgetRows.map((_, index) => index)));
-      
+
       if (budgetRows.length === 0) {
         toast({
           title: 'No valid data found',
@@ -153,8 +153,26 @@ export default function BudgetUpload() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Check for existing items first
+      const { data: existingItems, error: fetchError } = await supabase
+        .from('budget_master')
+        .select('serial_no')
+        .eq('fiscal_year', fiscalYear);
+
+      if (fetchError) throw fetchError;
+
+      const existingSerialNos = new Set((existingItems || []).map(item => item.serial_no));
+
       // Insert only selected budget master items
       const selectedPreview = preview.filter((_, index) => selectedItems.has(index));
+
+      // Check for duplicates
+      const duplicates = selectedPreview.filter(item => existingSerialNos.has(item.serial_no));
+
+      if (duplicates.length > 0) {
+        throw new Error(`Budget already exists for ${duplicates.length} items (e.g. Serial No: ${duplicates[0].serial_no}). Please use Corrections to edit.`);
+      }
+
       const budgetItems = selectedPreview.map(item => ({
         fiscal_year: fiscalYear,
         serial_no: item.serial_no,
@@ -168,10 +186,7 @@ export default function BudgetUpload() {
 
       const { error } = await supabase
         .from('budget_master')
-        .upsert(budgetItems, {
-          onConflict: 'fiscal_year,serial_no',
-          ignoreDuplicates: false,
-        });
+        .insert(budgetItems);
 
       if (error) throw error;
 

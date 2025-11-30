@@ -50,16 +50,16 @@ export default function IncomeBudgetUpload() {
 
       if (error) throw error;
       setCategories(data || []);
-      
+
       // Separate parent and child categories
       const parents = (data || []).filter(cat => cat.parent_category_id === null);
       const children = (data || []).filter(cat => cat.parent_category_id !== null);
-      
+
       setParentCategories(parents);
-      
+
       // Initialize manual budgets
       const initialBudgets: Record<string, number> = {};
-      
+
       // For treasurer: initialize with parent categories
       // For accountant: initialize with all categories (including children)
       if (userRole === 'treasurer') {
@@ -71,7 +71,7 @@ export default function IncomeBudgetUpload() {
           initialBudgets[cat.id] = 0;
         });
       }
-      
+
       setManualBudgets(initialBudgets);
     } catch (error: any) {
       toast({
@@ -105,7 +105,7 @@ export default function IncomeBudgetUpload() {
 
       // Map Excel data to income categories
       const budgetRows: IncomeBudgetRow[] = [];
-      
+
       jsonData.forEach((row: any) => {
         const categoryName = String(row['Category'] || row['CATEGORY'] || '').trim();
         const subcategoryName = String(row['Subcategory'] || row['SUBCATEGORY'] || '').trim();
@@ -131,7 +131,7 @@ export default function IncomeBudgetUpload() {
       });
 
       setPreview(budgetRows);
-      
+
       if (budgetRows.length === 0) {
         toast({
           title: 'No valid data found',
@@ -169,6 +169,23 @@ export default function IncomeBudgetUpload() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Check for existing items first
+      const { data: existingItems, error: fetchError } = await supabase
+        .from('income_budget')
+        .select('category_id')
+        .eq('fiscal_year', fiscalYear);
+
+      if (fetchError) throw fetchError;
+
+      const existingCategoryIds = new Set((existingItems || []).map(item => item.category_id));
+
+      // Check for duplicates
+      const duplicates = preview.filter(item => existingCategoryIds.has(item.category_id));
+
+      if (duplicates.length > 0) {
+        throw new Error(`Budget already exists for ${duplicates.length} categories (e.g. ${duplicates[0].category_name}). Please use Corrections to edit.`);
+      }
+
       const budgetItems = preview.map(item => ({
         fiscal_year: fiscalYear,
         category_id: item.category_id,
@@ -178,10 +195,7 @@ export default function IncomeBudgetUpload() {
 
       const { error } = await supabase
         .from('income_budget')
-        .upsert(budgetItems, {
-          onConflict: 'fiscal_year,category_id',
-          ignoreDuplicates: false,
-        });
+        .insert(budgetItems);
 
       if (error) throw error;
 
@@ -212,6 +226,16 @@ export default function IncomeBudgetUpload() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Check for existing items first
+      const { data: existingItems, error: fetchError } = await supabase
+        .from('income_budget')
+        .select('category_id')
+        .eq('fiscal_year', fiscalYear);
+
+      if (fetchError) throw fetchError;
+
+      const existingCategoryIds = new Set((existingItems || []).map(item => item.category_id));
+
       const budgetItems = Object.entries(manualBudgets)
         .filter(([_, amount]) => amount > 0)
         .map(([categoryId, amount]) => ({
@@ -220,6 +244,16 @@ export default function IncomeBudgetUpload() {
           budgeted_amount: amount,
           created_by: user.id,
         }));
+
+      // Check for duplicates
+      const duplicates = budgetItems.filter(item => existingCategoryIds.has(item.category_id));
+
+      if (duplicates.length > 0) {
+        // Find category name for error message
+        const duplicateCat = categories.find(c => c.id === duplicates[0].category_id);
+        const catName = duplicateCat ? getCategoryDisplay(duplicateCat) : 'Unknown Category';
+        throw new Error(`Budget already exists for ${duplicates.length} categories (e.g. ${catName}). Please use Corrections to edit.`);
+      }
 
       if (budgetItems.length === 0) {
         toast({
@@ -232,10 +266,7 @@ export default function IncomeBudgetUpload() {
 
       const { error } = await supabase
         .from('income_budget')
-        .upsert(budgetItems, {
-          onConflict: 'fiscal_year,category_id',
-          ignoreDuplicates: false,
-        });
+        .insert(budgetItems);
 
       if (error) throw error;
 
@@ -263,7 +294,7 @@ export default function IncomeBudgetUpload() {
   };
 
   const getCategoryDisplay = (cat: IncomeCategory) => {
-    return cat.subcategory_name 
+    return cat.subcategory_name
       ? `${cat.category_name} - ${cat.subcategory_name}`
       : cat.category_name;
   };
@@ -378,7 +409,7 @@ export default function IncomeBudgetUpload() {
               <CardHeader>
                 <CardTitle>Manual Budget Entry</CardTitle>
                 <CardDescription>
-                  {userRole === 'treasurer' 
+                  {userRole === 'treasurer'
                     ? 'Enter budget amounts for each income category group'
                     : 'Enter budget amounts for each income subcategory'}
                 </CardDescription>
@@ -413,7 +444,7 @@ export default function IncomeBudgetUpload() {
                     // Accountant View: Show all categories grouped by parent
                     parentCategories.map((parent) => {
                       const children = categories.filter(cat => cat.parent_category_id === parent.id);
-                      
+
                       return (
                         <div key={parent.id} className="space-y-3">
                           <h3 className="font-semibold text-sm text-muted-foreground uppercase">
