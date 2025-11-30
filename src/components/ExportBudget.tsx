@@ -23,6 +23,7 @@ export function ExportBudget() {
         const { data: expenseData, error: expenseError } = await supabase
             .from('budget_master')
             .select('category, item_name, annual_budget')
+            .eq('fiscal_year', 'FY25-26')
             .order('category');
 
         if (expenseError) throw expenseError;
@@ -43,7 +44,8 @@ export function ExportBudget() {
                     category_name,
                     subcategory_name
                 )
-            `);
+            `)
+            .eq('fiscal_year', 'FY25-26');
 
         if (incomeError) throw incomeError;
 
