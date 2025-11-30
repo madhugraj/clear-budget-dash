@@ -676,6 +676,9 @@ export default function Approvals() {
                           <Button size="sm" onClick={() => handleApproveIncome(income.id)}>
                             Approve
                           </Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleRejectIncome(income.id)}>
+                            Reject
+                          </Button>
                         </div>
                       </div>
                     </div>
