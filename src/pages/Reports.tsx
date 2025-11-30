@@ -3,11 +3,32 @@ import { ExportIncome } from '@/components/ExportIncome';
 import { ExportGST } from '@/components/ExportGST';
 import { ExportBudget } from '@/components/ExportBudget';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
 import { ExportPettyCash } from '@/components/ExportPettyCash';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Reports() {
+  const { userRole } = useAuth();
+
+  // Role-based tab access:
+  // Treasurer: All reports (Expense, Income, GST, Budget, Petty Cash)
+  // Accountant: Income, Expense (no budget), Petty Cash, GST
+  // Lead: Only Petty Cash report
+
+  const canAccessExpense = userRole === 'treasurer' || userRole === 'accountant';
+  const canAccessIncome = userRole === 'treasurer' || userRole === 'accountant';
+  const canAccessGST = userRole === 'treasurer' || userRole === 'accountant';
+  const canAccessBudget = userRole === 'treasurer';
+  const canAccessPettyCash = true; // All roles can access petty cash
+
+  // Determine default tab based on role
+  const getDefaultTab = () => {
+    if (userRole === 'lead') return 'petty-cash';
+    return 'expense';
+  };
+
+  // Count visible tabs for grid
+  const visibleTabCount = [canAccessExpense, canAccessIncome, canAccessGST, canAccessBudget, canAccessPettyCash].filter(Boolean).length;
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div>
@@ -17,33 +38,44 @@ export default function Reports() {
         </p>
       </div>
 
-      <Tabs defaultValue="expense" className="w-full">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5">
-          <TabsTrigger value="expense">Expense</TabsTrigger>
-          <TabsTrigger value="income">Income</TabsTrigger>
-          <TabsTrigger value="gst">GST</TabsTrigger>
-          <TabsTrigger value="budget">Budget</TabsTrigger>
-          <TabsTrigger value="petty-cash">Petty Cash</TabsTrigger>
+      <Tabs defaultValue={getDefaultTab()} className="w-full">
+        <TabsList className={`grid w-full max-w-2xl`} style={{ gridTemplateColumns: `repeat(${visibleTabCount}, 1fr)` }}>
+          {canAccessExpense && <TabsTrigger value="expense">Expense</TabsTrigger>}
+          {canAccessIncome && <TabsTrigger value="income">Income</TabsTrigger>}
+          {canAccessGST && <TabsTrigger value="gst">GST</TabsTrigger>}
+          {canAccessBudget && <TabsTrigger value="budget">Budget</TabsTrigger>}
+          {canAccessPettyCash && <TabsTrigger value="petty-cash">Petty Cash</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="expense" className="mt-6">
-          <ExportExpenses />
-        </TabsContent>
+        {canAccessExpense && (
+          <TabsContent value="expense" className="mt-6">
+            <ExportExpenses />
+          </TabsContent>
+        )}
 
-        <TabsContent value="income" className="mt-6">
-          <ExportIncome />
-        </TabsContent>
+        {canAccessIncome && (
+          <TabsContent value="income" className="mt-6">
+            <ExportIncome />
+          </TabsContent>
+        )}
 
-        <TabsContent value="gst" className="mt-6">
-          <ExportGST />
-        </TabsContent>
-        <TabsContent value="budget" className="mt-6">
-          <ExportBudget />
-        </TabsContent>
+        {canAccessGST && (
+          <TabsContent value="gst" className="mt-6">
+            <ExportGST />
+          </TabsContent>
+        )}
 
-        <TabsContent value="petty-cash" className="mt-6">
-          <ExportPettyCash />
-        </TabsContent>
+        {canAccessBudget && (
+          <TabsContent value="budget" className="mt-6">
+            <ExportBudget />
+          </TabsContent>
+        )}
+
+        {canAccessPettyCash && (
+          <TabsContent value="petty-cash" className="mt-6">
+            <ExportPettyCash />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
