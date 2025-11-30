@@ -16,6 +16,7 @@ interface NotificationCounts {
   pendingExpenses: number;
   pendingIncome: number;
   correctionRequests: number;
+  pendingPettyCash: number;
 }
 
 export function NotificationBell() {
@@ -25,10 +26,11 @@ export function NotificationBell() {
     pendingExpenses: 0,
     pendingIncome: 0,
     correctionRequests: 0,
+    pendingPettyCash: 0,
   });
   const [isOpen, setIsOpen] = useState(false);
 
-  const totalCount = counts.pendingExpenses + counts.pendingIncome + counts.correctionRequests;
+  const totalCount = counts.pendingExpenses + counts.pendingIncome + counts.correctionRequests + counts.pendingPettyCash;
 
   useEffect(() => {
     if (userRole === 'treasurer') {
@@ -60,10 +62,17 @@ export function NotificationBell() {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'correction_pending');
 
+      // Fetch pending petty cash count
+      const { count: pettyCashCount } = await supabase
+        .from('petty_cash')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
       setCounts({
         pendingExpenses: expenseCount || 0,
         pendingIncome: incomeCount || 0,
         correctionRequests: correctionCount || 0,
+        pendingPettyCash: pettyCashCount || 0,
       });
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -142,6 +151,21 @@ export function NotificationBell() {
                     </div>
                   </div>
                   <Badge variant="secondary">{counts.correctionRequests}</Badge>
+                </button>
+              )}
+
+              {counts.pendingPettyCash > 0 && (
+                <button
+                  onClick={() => handleNavigate('petty-cash')}
+                  className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                >
+                  <div>
+                    <div className="font-medium">Pending Petty Cash</div>
+                    <div className="text-sm text-muted-foreground">
+                      {counts.pendingPettyCash} petty cash entr{counts.pendingPettyCash !== 1 ? 'ies' : 'y'} awaiting approval
+                    </div>
+                  </div>
+                  <Badge variant="secondary">{counts.pendingPettyCash}</Badge>
                 </button>
               )}
               
