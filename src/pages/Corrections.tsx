@@ -1144,7 +1144,7 @@ export default function Corrections() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Date</TableHead>
+                            <TableHead>Month</TableHead>
                             <TableHead>Category</TableHead>
                             <TableHead>Subcategory</TableHead>
                             <TableHead>Notes</TableHead>
@@ -1159,8 +1159,8 @@ export default function Corrections() {
                         <TableBody>
                           {historicalIncome.map((income) => (
                             <TableRow key={income.id}>
-                              <TableCell className="text-sm">
-                                {new Date(income.created_at).toLocaleDateString('en-IN')}
+                              <TableCell className="text-sm font-medium">
+                                {MONTHS.find(m => m.value === income.month)?.label || income.month} {income.fiscal_year}
                               </TableCell>
                               <TableCell className="text-sm">
                                 {income.income_categories?.category_name || 'N/A'}
@@ -1481,15 +1481,31 @@ export default function Corrections() {
 
           {selectedIncome && (
             <form onSubmit={(e) => { e.preventDefault(); handleSaveIncomeCorrection(); }} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-income-date">Date *</Label>
-                <Input
-                  id="edit-income-date"
-                  type="date"
-                  value={editIncomeDate}
-                  onChange={(e) => setEditIncomeDate(e.target.value)}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-month">Month *</Label>
+                  <Select value={editIncomeMonth.toString()} onValueChange={(val) => setEditIncomeMonth(parseInt(val))}>
+                    <SelectTrigger id="edit-income-month">
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((month) => (
+                        <SelectItem key={month.value} value={month.value.toString()}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-income-fiscal-year">Fiscal Year</Label>
+                  <Input
+                    id="edit-income-fiscal-year"
+                    value={editIncomeFiscalYear}
+                    onChange={(e) => setEditIncomeFiscalYear(e.target.value)}
+                    disabled
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

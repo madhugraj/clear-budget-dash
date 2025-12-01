@@ -144,26 +144,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         )}
 
+        {/* Desktop Top-Right Controls (Bell + Logout) */}
+        {user && (
+          <div className="hidden lg:flex fixed top-4 right-6 z-50 items-center gap-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 py-2 rounded-lg border shadow-sm">
+            <NotificationBell />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={signOut}
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        )}
+
         {/* Sidebar */}
         {user && (
           <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
             <div className="flex flex-col h-full">
               <div className="p-6 border-b">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
-                  <div className="flex items-center gap-1">
-                    <NotificationBell />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={signOut}
-                      title="Sign Out"
-                    >
-                      <LogOut className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
                 {userRole && (
                   <p className="text-sm text-muted-foreground mt-1 capitalize">
                     {userRole === 'treasurer' ? 'Admin' : userRole}
