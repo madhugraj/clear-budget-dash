@@ -128,42 +128,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </header>
 
       {/* Desktop Layout */}
-      <div className="lg:flex">
-        {/* Login Button for Desktop (when not logged in) */}
-        {!user && (
-          <div className="hidden lg:block fixed top-8 right-8 z-50">
-            <Button
-              variant="default"
-              size="default"
-              onClick={() => navigate('/auth')}
-              className="shadow-lg hover:shadow-xl transition-all"
-            >
-              <LogIn className="mr-2 h-4 w-4" />
-              Login
-            </Button>
-          </div>
-        )}
-
-        {/* Desktop Top-Right Controls (Bell + Logout) */}
-        {user && (
-          <div className="hidden lg:flex fixed top-4 right-6 z-50 items-center gap-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 py-2 rounded-lg border shadow-sm">
-            <NotificationBell />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={signOut}
-              title="Sign Out"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        )}
-
+      <div className="lg:flex min-h-screen">
         {/* Sidebar */}
         {user && (
-          <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
+          <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card z-50">
             <div className="flex flex-col h-full">
               <div className="p-6 border-b">
                 <h2 className="text-2xl font-bold text-primary">Expense Manager</h2>
@@ -173,19 +141,51 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </p>
                 )}
               </div>
-              <nav className="flex-1 p-4 space-y-1">
+              <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                 <NavLinks />
               </nav>
             </div>
           </aside>
         )}
 
-        {/* Main Content */}
-        <main className={cn("flex-1", user && "lg:pl-64")}>
-          <div className="p-6 lg:p-8">
-            {children}
-          </div>
-        </main>
+        {/* Main Content Wrapper */}
+        <div className={cn("flex-1 flex flex-col transition-all duration-300", user && "lg:pl-64")}>
+
+          {/* Desktop Header for Controls */}
+          <header className="hidden lg:flex items-center justify-end gap-4 p-4 border-b bg-background/80 backdrop-blur-md sticky top-0 z-40">
+            {!user ? (
+              <Button
+                variant="default"
+                onClick={() => navigate('/auth')}
+                className="shadow-sm hover:shadow-md transition-all"
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                Login
+              </Button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <NotificationBell />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={signOut}
+                  title="Sign Out"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            )}
+          </header>
+
+          {/* Main Content Area */}
+          <main className="flex-1 p-6 lg:p-8">
+            <div className="mx-auto max-w-7xl animate-fade-in">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );
