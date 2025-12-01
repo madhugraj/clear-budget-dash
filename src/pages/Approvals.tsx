@@ -104,6 +104,7 @@ export default function Approvals() {
   const [selectedPettyCash, setSelectedPettyCash] = useState<PettyCash | null>(null);
   const [selectedCorrectionIds, setSelectedCorrectionIds] = useState<Set<string>>(new Set());
   const [selectedIncomeIds, setSelectedIncomeIds] = useState<Set<string>>(new Set());
+  const [selectedPettyCashIds, setSelectedPettyCashIds] = useState<Set<string>>(new Set());
   const [correctionReason, setCorrectionReason] = useState('');
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
@@ -543,6 +544,51 @@ export default function Approvals() {
   };
 
 
+  const handleBulkApprovePettyCash = async () => {
+    if (selectedPettyCashIds.size === 0) {
+      toast({
+        title: 'No items selected',
+        description: 'Please select at least one petty cash request to approve',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const pettyCashIds = Array.from(selectedPettyCashIds);
+
+      const { error } = await supabase
+        .from('petty_cash')
+        .update({
+          status: 'approved',
+          approved_by: user.id,
+        })
+        .in('id', pettyCashIds);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success!',
+        description: `Approved ${pettyCashIds.length} petty cash request(s)`,
+      });
+
+      setSelectedPettyCashIds(new Set());
+      loadApprovals();
+    } catch (error: any) {
+      toast({
+        title: 'Error approving petty cash',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleApprovePettyCash = async (id: string) => {
     setProcessing(true);
     try {
@@ -844,8 +890,48 @@ export default function Approvals() {
         <TabsContent value="petty-cash" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Petty Cash</CardTitle>
-              <CardDescription>Review petty cash requests</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Pending Petty Cash</CardTitle>
+                  <CardDescription>Review petty cash requests</CardDescription>
+                </div>
+                {pendingPettyCash.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (selectedPettyCashIds.size === pendingPettyCash.length) {
+                          setSelectedPettyCashIds(new Set());
+                        } else {
+                          setSelectedPettyCashIds(new Set(pendingPettyCash.map(i => i.id)));
+                        }
+                      }}
+                    >
+                      {selectedPettyCashIds.size === pendingPettyCash.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                    {selectedPettyCashIds.size > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={handleBulkApprovePettyCash}
+                        disabled={processing}
+                      >
+                        {processing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Approving...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Approve Selected ({selectedPettyCashIds.size})
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {pendingPettyCash.length === 0 ? (
@@ -853,8 +939,22 @@ export default function Approvals() {
               ) : (
                 <div className="space-y-4">
                   {pendingPettyCash.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="space-y-1">
+                    <div key={item.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedPettyCashIds.has(item.id)}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedPettyCashIds);
+                          if (e.target.checked) {
+                            newSelected.add(item.id);
+                          } else {
+                            newSelected.delete(item.id);
+                          }
+                          setSelectedPettyCashIds(newSelected);
+                        }}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                      <div className="flex-1 space-y-1">
                         <div className="font-medium">{item.item_name}</div>
                         <div className="text-sm text-muted-foreground">
                           {item.profiles?.full_name} • {new Date(item.date).toLocaleDateString()}
