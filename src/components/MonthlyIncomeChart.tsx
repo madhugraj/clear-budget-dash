@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 interface MonthlyIncomeData {
   month: string;
@@ -21,31 +21,36 @@ export const MonthlyIncomeChart = ({ data }: MonthlyIncomeChartProps) => {
     }).format(value);
   };
 
+  const formatCompact = (value: number) => {
+    if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
+    if (value >= 100000) return `₹${(value / 100000).toFixed(0)}L`;
+    if (value >= 1000) return `₹${(value / 1000).toFixed(0)}K`;
+    return `₹${value}`;
+  };
+
+  // Calculate average monthly budget for reference line
+  const avgBudget = data.length > 0 
+    ? data.reduce((sum, d) => sum + d.budget, 0) / data.length 
+    : 0;
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
-      const budget = payload[0].value;
-      const actual = payload[1].value;
-      const variance = actual - budget;
-      const variancePercent = budget > 0 ? ((actual - budget) / budget * 100).toFixed(1) : '0.0';
+      const actual = payload[0].value;
+      const budget = data.find(d => d.month === label)?.budget || 0;
+      const achievement = budget > 0 ? ((actual / budget) * 100).toFixed(0) : '0';
 
       return (
-        <div className="bg-card border border-border p-4 rounded-lg shadow-lg">
-          <p className="font-semibold text-foreground mb-2">{label}</p>
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">
-              Budget: <span className="font-medium text-foreground">{formatCurrency(budget)}</span>
-            </p>
-            <p className="text-muted-foreground">
-              Actual (Total): <span className="font-medium text-foreground">{formatCurrency(actual)}</span>
-            </p>
-            <p className="text-[10px] text-muted-foreground/70 italic">
-              (Base + GST combined)
-            </p>
-            <p className={variance >= 0 ? "text-green-600" : "text-red-600"}>
-              Variance: <span className="font-medium">{formatCurrency(Math.abs(variance))} ({variancePercent}%)</span>
-              {variance >= 0 ? " ↑" : " ↓"}
-            </p>
-          </div>
+        <div className="bg-card border border-border px-3 py-2 rounded-md shadow-sm text-sm">
+          <p className="font-medium text-foreground">{label}</p>
+          <p className="text-muted-foreground">
+            Actual: <span className="text-foreground font-medium">{formatCurrency(actual)}</span>
+          </p>
+          <p className="text-muted-foreground">
+            Budget: <span className="text-foreground font-medium">{formatCurrency(budget)}</span>
+          </p>
+          <p className={Number(achievement) >= 100 ? "text-green-600" : "text-amber-600"}>
+            {achievement}% achieved
+          </p>
         </div>
       );
     }
@@ -53,22 +58,40 @@ export const MonthlyIncomeChart = ({ data }: MonthlyIncomeChartProps) => {
   };
 
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4 text-foreground">Monthly Income Overview</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-          <YAxis 
-            tickFormatter={formatCurrency}
-            stroke="hsl(var(--muted-foreground))"
+    <Card className="p-4">
+      <h3 className="text-sm font-medium mb-3 text-foreground">Monthly Income</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={data} barCategoryGap="20%">
+          <XAxis 
+            dataKey="month" 
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Bar dataKey="budget" fill="hsl(var(--primary))" name="Budgeted Income" />
-          <Bar dataKey="actual" fill="hsl(var(--chart-2))" name="Actual Income" />
+          <YAxis 
+            tickFormatter={formatCompact}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+            width={50}
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.3)' }} />
+          <ReferenceLine 
+            y={avgBudget} 
+            stroke="hsl(var(--muted-foreground))" 
+            strokeDasharray="4 4" 
+            strokeWidth={1}
+          />
+          <Bar 
+            dataKey="actual" 
+            fill="hsl(var(--primary))" 
+            radius={[3, 3, 0, 0]}
+          />
         </BarChart>
       </ResponsiveContainer>
+      <p className="text-xs text-muted-foreground mt-2 text-center">
+        Dashed line = avg monthly budget
+      </p>
     </Card>
   );
 };

@@ -1,5 +1,4 @@
 import { Card } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface CategoryIncomeData {
   category: string;
@@ -13,75 +12,73 @@ interface CategoryWiseIncomeChartProps {
 }
 
 export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) => {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatCompactCurrency = (value: number) => {
+  const formatCompact = (value: number) => {
     if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
     if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
+    if (value >= 1000) return `₹${(value / 1000).toFixed(0)}K`;
     return `₹${value}`;
   };
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-card border border-border p-4 rounded-lg shadow-lg">
-          <p className="font-semibold text-foreground mb-2">{data.category}</p>
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">
-              Budget: <span className="font-medium text-foreground">{formatCurrency(data.budget)}</span>
-            </p>
-            <p className="text-muted-foreground">
-              Actual (Total): <span className="font-medium text-foreground">{formatCurrency(data.actual)}</span>
-            </p>
-            <p className="text-[10px] text-muted-foreground/70 italic">
-              (Base + GST combined)
-            </p>
-            <p className="text-muted-foreground">
-              Achievement: <span className="font-medium text-foreground">{data.utilization.toFixed(1)}%</span>
-            </p>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  // Sort by utilization descending
+  const sortedData = [...data].sort((a, b) => b.utilization - a.utilization);
 
-  const getBarColor = (utilization: number) => {
-    if (utilization >= 100) return 'hsl(var(--chart-2))'; // Green for met/exceeded
-    if (utilization >= 75) return 'hsl(var(--chart-3))'; // Yellow for good progress
-    return 'hsl(var(--chart-5))'; // Red for low achievement
-  };
+  // Find max value for scaling
+  const maxValue = Math.max(...data.map(d => Math.max(d.actual, d.budget)));
 
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4 text-foreground">Category-wise Income Achievement</h3>
-      <ResponsiveContainer width="100%" height={400}>
-        <BarChart data={data} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis type="number" tickFormatter={formatCompactCurrency} stroke="hsl(var(--muted-foreground))" />
-          <YAxis 
-            dataKey="category" 
-            type="category" 
-            width={150}
-            stroke="hsl(var(--muted-foreground))"
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar 
-            dataKey="actual" 
-            fill="hsl(var(--primary))"
-            radius={[0, 4, 4, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+    <Card className="p-4">
+      <h3 className="text-sm font-medium mb-4 text-foreground">Category Achievement</h3>
+      <div className="space-y-3">
+        {sortedData.map((item) => {
+          const actualWidth = maxValue > 0 ? (item.actual / maxValue) * 100 : 0;
+          const budgetWidth = maxValue > 0 ? (item.budget / maxValue) * 100 : 0;
+          const isAchieved = item.utilization >= 100;
+
+          return (
+            <div key={item.category} className="space-y-1">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-foreground font-medium truncate max-w-[140px]" title={item.category}>
+                  {item.category}
+                </span>
+                <span className={`font-medium ${isAchieved ? 'text-green-600' : 'text-amber-600'}`}>
+                  {item.utilization.toFixed(0)}%
+                </span>
+              </div>
+              <div className="relative h-5 bg-muted/30 rounded overflow-hidden">
+                {/* Budget bar (background) */}
+                <div 
+                  className="absolute top-0 left-0 h-full bg-muted/50 rounded"
+                  style={{ width: `${budgetWidth}%` }}
+                />
+                {/* Actual bar (foreground) */}
+                <div 
+                  className={`absolute top-0 left-0 h-full rounded transition-all ${
+                    isAchieved ? 'bg-green-500/80' : 'bg-primary/80'
+                  }`}
+                  style={{ width: `${actualWidth}%` }}
+                />
+                {/* Values */}
+                <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]">
+                  <span className="text-foreground font-medium drop-shadow-sm">
+                    {formatCompact(item.actual)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    / {formatCompact(item.budget)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground justify-center">
+        <span className="flex items-center gap-1">
+          <div className="w-3 h-2 bg-primary/80 rounded" /> Actual
+        </span>
+        <span className="flex items-center gap-1">
+          <div className="w-3 h-2 bg-muted/50 rounded" /> Budget
+        </span>
+      </div>
     </Card>
   );
 };
