@@ -72,24 +72,24 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
   // Calculate projections
   const getProjections = (item: ItemDetail | undefined) => {
     if (!item) return { projected: 0, projectedUtilization: 0, monthlyAvg: 0, runRate: 0 };
-    
+
     // FY 2025-26: April 2025 to March 2026 (12 months total)
     // Current data: April to October 2025 (7 months)
     const monthsElapsed = item.monthsElapsed || 7;
     const monthsRemaining = item.monthsRemaining || 5;
     const totalMonths = monthsElapsed + monthsRemaining; // 12 months
-    
+
     // Monthly average based on actual spending so far
     const monthlyAvg = monthsElapsed > 0 ? item.actual / monthsElapsed : 0;
-    
+
     // Simple linear projection: assumes same spending rate continues
     const projected = item.actual + (monthlyAvg * monthsRemaining);
     const projectedUtilization = item.budget > 0 ? (projected / item.budget) * 100 : 0;
-    
+
     // Run rate: what % of budget should be used by now (proportional to time elapsed)
     const expectedUtilizationByNow = (monthsElapsed / totalMonths) * 100; // Should be ~58.3% (7/12)
     const runRate = item.utilization - expectedUtilizationByNow; // Positive = ahead of schedule
-    
+
     return { projected, projectedUtilization, monthlyAvg, runRate, expectedUtilizationByNow };
   };
 
@@ -102,7 +102,7 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
         <CardDescription className="text-sm">
           Select category, committee, and item to view detailed calculations
         </CardDescription>
-        
+
         {/* Filter Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -165,25 +165,25 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                 <BarChart
                   data={[
                     { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
-                    { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                    { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--primary))' },
                     { name: 'Projected', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
                   ]}
                   margin={{ top: 5, right: 5, left: 5, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
-                  <XAxis 
-                    dataKey="name" 
+                  <XAxis
+                    dataKey="name"
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis 
+                  <YAxis
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: number) => formatCurrency(value)}
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
@@ -193,8 +193,8 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                       padding: '6px'
                     }}
                   />
-                  <Bar 
-                    dataKey="value" 
+                  <Bar
+                    dataKey="value"
                     radius={[4, 4, 0, 0]}
                     isAnimationActive={true}
                     animationBegin={200}
@@ -203,7 +203,7 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                   >
                     {[
                       { name: 'Budget', value: currentItem.budget, fill: 'hsl(var(--primary))' },
-                      { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--success))' },
+                      { name: 'Spent', value: currentItem.actual, fill: currentItem.actual > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--primary))' },
                       { name: 'Projected', value: projections.projected, fill: projections.projected > currentItem.budget ? 'hsl(var(--destructive))' : 'hsl(var(--warning))' },
                     ].map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -227,10 +227,9 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
                 <div>
                   <p className="text-muted-foreground mb-1">Budget Used</p>
                   <p className="font-medium">{currentItem.utilization.toFixed(1)}%</p>
-                  <p className={`text-[10px] mt-0.5 ${
-                    projections.runRate > 5 ? 'text-warning' : 
-                    projections.runRate < -5 ? 'text-success' : 'text-muted-foreground'
-                  }`}>
+                  <p className={`text-[10px] mt-0.5 ${projections.runRate > 5 ? 'text-warning' :
+                      projections.runRate < -5 ? 'text-primary' : 'text-muted-foreground'
+                    }`}>
                     {projections.runRate > 0 ? '+' : ''}{projections.runRate.toFixed(1)}% vs expected pace
                   </p>
                 </div>
@@ -247,24 +246,23 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
             {/* Main Calculation Display */}
             <div className="p-4 bg-muted/20 rounded-lg space-y-3 border">
               <p className="text-xs font-medium">Current Status (as of October 2025):</p>
-              
+
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center pb-2 border-b">
                   <span className="text-muted-foreground">Annual Budget (FY 2025-26)</span>
                   <span className="font-semibold">{formatCurrency(currentItem.budget)}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pb-2 border-b">
                   <span className="text-muted-foreground">Total Spent (Apr - Oct)</span>
                   <span className="font-semibold">{formatCurrency(currentItem.actual)}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pb-2 border-b">
                   <span className="text-muted-foreground">Current Utilization</span>
-                  <span className={`font-semibold ${
-                    currentItem.utilization > 100 ? 'text-destructive' : 
-                    currentItem.utilization > 80 ? 'text-warning' : 'text-success'
-                  }`}>
+                  <span className={`font-semibold ${currentItem.utilization > 100 ? 'text-destructive' :
+                      currentItem.utilization > 80 ? 'text-warning' : 'text-primary'
+                    }`}>
                     {currentItem.utilization.toFixed(1)}%
                   </span>
                 </div>
@@ -272,52 +270,50 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
             </div>
 
             {/* Projection Calculation */}
-            <div className={`p-4 rounded-lg space-y-3 border ${
-              projections.projected > currentItem.budget 
-                ? 'bg-warning/10 border-warning/30' 
-                : 'bg-success/10 border-success/30'
-            }`}>
+            <div className={`p-4 rounded-lg space-y-3 border ${projections.projected > currentItem.budget
+                ? 'bg-warning/10 border-warning/30'
+                : 'bg-primary/10 border-primary/30'
+              }`}>
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-medium">Linear Projection (if current rate continues):</p>
                 <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
                   Assumes constant spending rate
                 </span>
               </div>
-              
+
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center pb-2 border-b border-border/20">
                   <span className="text-muted-foreground">Spent (7 months)</span>
                   <span className="font-semibold">{formatCurrency(currentItem.actual)}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pb-2 border-b border-border/20">
                   <span className="text-muted-foreground">Projected Additional (5 months)</span>
                   <span className="font-semibold">{formatCurrency(projections.monthlyAvg * (currentItem.monthsRemaining || 5))}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pb-2 border-b border-border/20">
                   <span className="text-muted-foreground">Projected Total by March</span>
                   <span className="font-semibold">{formatCurrency(projections.projected)}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pb-2 border-b border-border/20">
                   <span className="text-muted-foreground">Annual Budget</span>
                   <span className="font-semibold">{formatCurrency(currentItem.budget)}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center pt-1">
                   <span className="text-muted-foreground font-medium">
                     Projected vs Budget
                   </span>
-                  <span className={`font-bold text-base ${
-                    currentItem.budget - projections.projected >= 0 ? 'text-success' : 'text-destructive'
-                  }`}>
+                  <span className={`font-bold text-base ${currentItem.budget - projections.projected >= 0 ? 'text-primary' : 'text-destructive'
+                    }`}>
                     {currentItem.budget - projections.projected >= 0 ? '+' : ''}
                     {formatCurrency(currentItem.budget - projections.projected)}
                   </span>
                 </div>
               </div>
-              
+
               {/* Projection Formula */}
               <div className="pt-3 mt-3 border-t border-border/20 text-xs font-mono bg-muted/40 p-3 rounded space-y-1">
                 <p className="text-muted-foreground mb-2">Calculation:</p>
@@ -330,19 +326,18 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
             </div>
 
             {/* Status Indicator */}
-            <div className={`p-4 rounded-lg text-sm ${
-              projections.projected <= currentItem.budget 
-                ? 'bg-success/10 text-success border border-success/30' 
+            <div className={`p-4 rounded-lg text-sm ${projections.projected <= currentItem.budget
+                ? 'bg-primary/10 text-primary border border-primary/30'
                 : 'bg-destructive/10 text-destructive border border-destructive/30'
-            }`}>
+              }`}>
               <div className="font-medium mb-2">
-                {projections.projected <= currentItem.budget 
-                  ? '✓ On Track' 
+                {projections.projected <= currentItem.budget
+                  ? '✓ On Track'
                   : '⚠ At Risk'}
               </div>
               <div className="text-xs leading-relaxed">
-                {projections.projected <= currentItem.budget 
-                  ? `Based on current spending rate of ${formatCurrency(projections.monthlyAvg)}/month, you're projected to finish ${formatCurrency(currentItem.budget - projections.projected)} under budget. You're using ${currentItem.utilization.toFixed(1)}% of budget in ${projections.expectedUtilizationByNow.toFixed(1)}% of the year.` 
+                {projections.projected <= currentItem.budget
+                  ? `Based on current spending rate of ${formatCurrency(projections.monthlyAvg)}/month, you're projected to finish ${formatCurrency(currentItem.budget - projections.projected)} under budget. You're using ${currentItem.utilization.toFixed(1)}% of budget in ${projections.expectedUtilizationByNow.toFixed(1)}% of the year.`
                   : `At current rate (${formatCurrency(projections.monthlyAvg)}/month), spending may exceed budget by ${formatCurrency(Math.abs(currentItem.budget - projections.projected))} by March 2026. You've used ${currentItem.utilization.toFixed(1)}% of budget with only ${projections.expectedUtilizationByNow.toFixed(1)}% of the year elapsed. Consider reducing monthly spending to ~${formatCurrency(currentItem.budget / 12)} to stay within budget.`}
               </div>
             </div>
@@ -352,7 +347,7 @@ export function ItemAnalysisCard({ items }: ItemAnalysisCardProps) {
             <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg font-medium text-muted-foreground mb-2">No Item Selected</p>
             <p className="text-sm text-muted-foreground max-w-sm">
-              {filteredItems.length === 0 
+              {filteredItems.length === 0
                 ? 'No items match the selected filters. Please adjust your category or committee selection.'
                 : 'Select an item from the dropdown above to view detailed budget analysis.'}
             </p>

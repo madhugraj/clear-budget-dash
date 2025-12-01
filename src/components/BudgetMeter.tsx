@@ -9,32 +9,32 @@ interface BudgetMeterProps {
 export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
   const targetPercentage = budget > 0 ? (spent / budget) * 100 : 0;
   const remaining = Math.max(0, budget - spent);
-  
+
   // Animated percentage counter
   const [displayPercentage, setDisplayPercentage] = useState(0);
   const [animatedDasharray, setAnimatedDasharray] = useState(0);
-  
+
   useEffect(() => {
     const duration = 2000; // 2 seconds
     const steps = 60;
     const increment = targetPercentage / steps;
     const stepDuration = duration / steps;
-    
+
     let currentStep = 0;
     const timer = setInterval(() => {
       currentStep++;
       const newValue = Math.min(increment * currentStep, targetPercentage);
       setDisplayPercentage(newValue);
       setAnimatedDasharray(Math.min(newValue, 100) * 2.513);
-      
+
       if (currentStep >= steps) {
         clearInterval(timer);
       }
     }, stepDuration);
-    
+
     return () => clearInterval(timer);
   }, [targetPercentage]);
-  
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -55,13 +55,13 @@ export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
   const getColor = () => {
     if (targetPercentage > 100) return 'text-destructive';
     if (targetPercentage > 80) return 'text-warning';
-    return 'text-success';
+    return 'text-primary';
   };
 
   const getMeterColor = () => {
     if (targetPercentage > 100) return 'bg-destructive';
     if (targetPercentage > 80) return 'bg-warning';
-    return 'bg-success';
+    return 'bg-primary';
   };
 
   return (
@@ -91,20 +91,20 @@ export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
                     targetPercentage > 100
                       ? 'hsl(var(--destructive))'
                       : targetPercentage > 80
-                      ? 'hsl(var(--warning))'
-                      : 'hsl(var(--success))'
+                        ? 'hsl(var(--warning))'
+                        : 'hsl(var(--primary))'
                   }
                   strokeWidth="8"
                   strokeDasharray={`${animatedDasharray} 251.3`}
                   strokeLinecap="round"
                   className="transition-all duration-100 ease-out"
-                  style={{ 
+                  style={{
                     transformOrigin: 'center',
                     filter: 'drop-shadow(0 0 8px currentColor)'
                   }}
                 />
               </svg>
-              
+
               {/* Center Content */}
               <div className="absolute inset-0 flex flex-col items-center justify-center animate-[fade-in_0.8s_ease-out_0.4s_both]">
                 <p className={`text-3xl md:text-4xl font-bold ${getColor()} transition-colors duration-300`}>
@@ -113,10 +113,10 @@ export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
                 <p className="text-xs md:text-sm text-muted-foreground mt-1">Budget Used</p>
               </div>
             </div>
-            
+
             {/* Explanation */}
             <p className="text-xs text-center text-muted-foreground max-w-md px-4 animate-[fade-in_0.6s_ease-out_0.6s_both]">
-              This meter shows your total budget utilization. Green indicates healthy spending (&lt;80%), 
+              This meter shows your total budget utilization. Purple indicates healthy spending (&lt;80%),
               yellow shows you're approaching the limit (80-100%), and red means you've exceeded your budget (&gt;100%).
             </p>
           </div>
@@ -147,7 +147,7 @@ export function BudgetMeter({ budget, spent }: BudgetMeterProps) {
             <div className="h-3 bg-muted rounded-full overflow-hidden shadow-inner">
               <div
                 className={`h-full ${getMeterColor()} transition-all duration-2000 ease-out rounded-full shadow-lg`}
-                style={{ 
+                style={{
                   width: `${displayPercentage > 100 ? 100 : displayPercentage}%`,
                   boxShadow: '0 0 10px currentColor'
                 }}
