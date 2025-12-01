@@ -22,7 +22,9 @@ export default function Reports() {
 
   // Determine default tab based on role
   const getDefaultTab = () => {
-    if (userRole === 'lead') return 'petty-cash';
+    if (canAccessExpense) return 'expense';
+    if (canAccessIncome) return 'income';
+    if (canAccessPettyCash) return 'petty-cash';
     return 'expense';
   };
 

@@ -96,6 +96,7 @@ export default function Approvals() {
   // Historical Data State
   const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
   const [historicalIncome, setHistoricalIncome] = useState<Income[]>([]);
+  const [historicalPettyCash, setHistoricalPettyCash] = useState<PettyCash[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -265,6 +266,17 @@ export default function Approvals() {
 
       setHistoricalExpenses(expenses || []);
       setHistoricalIncome(incomeWithProfiles as Income[] || []);
+
+      // Fetch historical petty cash (approved)
+      const { data: pettyCash, error: pcError } = await supabase
+        .from('petty_cash')
+        .select('*, profiles!petty_cash_submitted_by_fkey (full_name, email)')
+        .eq('status', 'approved')
+        .order('date', { ascending: false })
+        .limit(50);
+
+      if (pcError) throw pcError;
+      setHistoricalPettyCash(pettyCash as unknown as PettyCash[] || []);
 
     } catch (error: any) {
       toast({
@@ -1069,8 +1081,35 @@ export default function Approvals() {
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <FileText className="h-5 w-5" /> Petty Cash History
                   </h3>
-                  <div className="rounded-md border p-8 text-center text-muted-foreground">
-                    Petty cash data is not yet available.
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Item</TableHead>
+                          <TableHead>Submitted By</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {historicalPettyCash.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                              No historical petty cash found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          historicalPettyCash.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>{new Date(item.date).toLocaleDateString()}</TableCell>
+                              <TableCell>{item.item_name}</TableCell>
+                              <TableCell>{item.profiles?.full_name}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               </div>

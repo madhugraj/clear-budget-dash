@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +27,7 @@ interface PettyCashRow {
 
 export function ExportPettyCash() {
     const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<string>('all');
     const [dateFrom, setDateFrom] = useState<Date | undefined>();
     const [dateTo, setDateTo] = useState<Date | undefined>();
     const [viewData, setViewData] = useState<PettyCashRow[]>([]);
@@ -37,6 +39,10 @@ export function ExportPettyCash() {
             .from('petty_cash')
             .select('*, profiles!petty_cash_submitted_by_fkey (full_name)')
             .order('date', { ascending: false });
+
+        if (status !== 'all') {
+            query = query.eq('status', status);
+        }
 
         if (dateFrom) {
             query = query.gte('date', format(dateFrom, 'yyyy-MM-dd'));
@@ -201,7 +207,21 @@ export function ExportPettyCash() {
                 <CardDescription>Download petty cash reports</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                        <Label>Status Filter</Label>
+                        <Select value={status} onValueChange={setStatus}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="approved">Approved</SelectItem>
+                                <SelectItem value="rejected">Rejected</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                     <div className="space-y-2">
                         <Label>Date From</Label>
                         <Popover>
@@ -286,7 +306,16 @@ export function ExportPettyCash() {
                                                     <td className="p-2">{row.item_name}</td>
                                                     <td className="p-2">{row.description}</td>
                                                     <td className="p-2">{row.submitter_name}</td>
-                                                    <td className="p-2 capitalize">{row.status}</td>
+                                                    <td className="p-2">
+                                                        <span className={cn(
+                                                            "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium capitalize",
+                                                            row.status === 'approved' && "bg-green-100 text-green-700",
+                                                            row.status === 'pending' && "bg-yellow-100 text-yellow-700",
+                                                            row.status === 'rejected' && "bg-red-100 text-red-700"
+                                                        )}>
+                                                            {row.status}
+                                                        </span>
+                                                    </td>
                                                     <td className="p-2 text-right font-medium">₹{row.amount.toLocaleString('en-IN')}</td>
                                                 </tr>
                                             ))}
