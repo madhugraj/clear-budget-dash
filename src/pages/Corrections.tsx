@@ -271,8 +271,14 @@ export default function Corrections() {
 
     setHistoricalLoading(true);
     try {
+      // Extract months from date range for filtering by accounting month
+      const fromDate = new Date(dateFrom);
+      const toDate = new Date(dateTo);
+      const fromMonth = fromDate.getMonth() + 1; // 1-12
+      const toMonth = toDate.getMonth() + 1; // 1-12
+      
       // First fetch income data without the profile join
-      const { data: incomeData, error } = await supabase
+      let query = supabase
         .from('income_actuals')
         .select(`
           id,
@@ -290,10 +296,18 @@ export default function Corrections() {
             subcategory_name
           )
         `)
-        .eq('status', 'approved')
-        .gte('created_at', `${dateFrom}T00:00:00`)
-        .lte('created_at', `${dateTo}T23:59:59`)
-        .order('created_at', { ascending: false });
+        .eq('status', 'approved');
+      
+      // Filter by month range (accounting months)
+      if (fromMonth <= toMonth) {
+        // Same direction range (e.g., April to October: 4-10)
+        query = query.gte('month', fromMonth).lte('month', toMonth);
+      } else {
+        // Wrapping range (e.g., October to March: 10-12 OR 1-3)
+        query = query.or(`month.gte.${fromMonth},month.lte.${toMonth}`);
+      }
+      
+      const { data: incomeData, error } = await query.order('month', { ascending: false });
 
       if (error) throw error;
 
