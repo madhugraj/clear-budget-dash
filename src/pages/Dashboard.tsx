@@ -15,6 +15,7 @@ import { BudgetMeter } from '@/components/BudgetMeter';
 import { OverBudgetAlert } from '@/components/OverBudgetAlert';
 import { RoleBadge } from '@/components/RoleBadge';
 import { RefreshCw } from 'lucide-react';
+import { PettyCashAnalytics } from '@/components/PettyCashAnalytics';
 interface DashboardStats {
   totalBudget: number;
   totalExpenses: number;
@@ -46,6 +47,15 @@ interface CategoryIncomeData {
   budget: number;
   utilization: number;
 }
+interface MonthlyPettyCashData {
+  month: string;
+  amount: number;
+}
+interface PettyCashItemData {
+  item_name: string;
+  count: number;
+  total_amount: number;
+}
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
@@ -55,6 +65,8 @@ export default function Dashboard() {
   const [allCommittees, setAllCommittees] = useState<string[]>([]);
   const [monthlyIncomeData, setMonthlyIncomeData] = useState<MonthlyIncomeData[]>([]);
   const [categoryIncomeData, setCategoryIncomeData] = useState<CategoryIncomeData[]>([]);
+  const [monthlyPettyCashData, setMonthlyPettyCashData] = useState<MonthlyPettyCashData[]>([]);
+  const [pettyCashItemData, setPettyCashItemData] = useState<PettyCashItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartKey, setChartKey] = useState(0);
   const {
@@ -64,15 +76,78 @@ export default function Dashboard() {
     userRole,
     user
   } = useAuth();
+
+  const loadPettyCashData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('petty_cash')
+        .select('amount, date, item_name')
+        .eq('status', 'approved')
+        .gte('date', '2025-04-01')
+        .lte('date', '2025-10-31')
+        .order('date');
+
+      if (error) throw error;
+
+      // Process monthly data
+      const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+      const monthlyMap: Record<string, number> = {};
+
+      data?.forEach(item => {
+        const month = new Date(item.date).toLocaleString('en-US', { month: 'short' });
+        monthlyMap[month] = (monthlyMap[month] || 0) + Number(item.amount);
+      });
+
+      const monthlyChartData = months.map(month => ({
+        month,
+        amount: monthlyMap[month] || 0
+      }));
+      setMonthlyPettyCashData(monthlyChartData);
+
+      // Process item repetition data
+      const itemMap: Record<string, { count: number; total: number }> = {};
+
+      data?.forEach(item => {
+        const name = item.item_name;
+        if (!itemMap[name]) {
+          itemMap[name] = { count: 0, total: 0 };
+        }
+        itemMap[name].count += 1;
+        itemMap[name].total += Number(item.amount);
+      });
+
+      const itemChartData = Object.entries(itemMap)
+        .map(([name, stats]) => ({
+          item_name: name,
+          count: stats.count,
+          total_amount: stats.total
+        }))
+        .sort((a, b) => b.count - a.count) // Sort by frequency
+        .slice(0, 10); // Top 10
+
+      setPettyCashItemData(itemChartData);
+
+    } catch (error: any) {
+      console.error('Error loading petty cash data:', error);
+      toast({
+        title: 'Error loading petty cash data',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
   useEffect(() => {
     loadDashboardData();
     loadIncomeData();
+    loadPettyCashData();
   }, []);
   const refreshCharts = () => {
     setChartKey(prev => prev + 1);
     setLoading(true);
     loadDashboardData();
     loadIncomeData();
+    loadPettyCashData();
   };
   const loadDashboardData = async () => {
     try {
@@ -329,7 +404,7 @@ export default function Dashboard() {
           utilization: data.budget > 0 ? data.actual / data.budget * 100 : 0
         };
       }).filter(item => item.budget > 0 || item.actual > 0) // Only show categories with data
-      .sort((a, b) => b.actual - a.actual);
+        .sort((a, b) => b.actual - a.actual);
       setCategoryIncomeData(categoryIncomeChartData);
     } catch (error: any) {
       console.error('Error loading income data:', error);
@@ -342,59 +417,59 @@ export default function Dashboard() {
   };
   if (loading) {
     return <div className="space-y-8 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
-        </div>
-        <div className="grid gap-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-light tracking-tight">Dashboard</h1>
+      </div>
+      <div className="grid gap-6">
+        <Skeleton className="h-[400px]" />
+        <div className="grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-[400px]" />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Skeleton className="h-[400px]" />
-            <Skeleton className="h-[400px]" />
-          </div>
+          <Skeleton className="h-[400px]" />
         </div>
-      </div>;
+      </div>
+    </div>;
   }
   return <div className="space-y-6 md:space-y-10 animate-fade-in max-w-[1600px] mx-auto">
-      {/* Hero Header Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 p-8 md:p-12 border border-primary/10">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-indigo-950 text-center md:text-6xl">
-            Prestige Bella Vista
-          </h1>
-          <p className="text-xl md:text-2xl mb-6 text-center font-normal text-secondary-foreground">
-            Expense Management System
-          </p>
+    {/* Hero Header Section */}
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 p-8 md:p-12 border border-primary/10">
+      <div className="relative z-10">
+        <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-indigo-950 text-center md:text-6xl">
+          Prestige Bella Vista
+        </h1>
+        <p className="text-xl md:text-2xl mb-6 text-center font-normal text-secondary-foreground">
+          Expense Management System
+        </p>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm">
-            {userRole && <div className="flex items-center gap-2">
-                <RoleBadge role={userRole} size="sm" />
-                <span className="text-muted-foreground">
-                  {userRole === 'treasurer' && 'Full system access'}
-                  {userRole === 'accountant' && 'Can add expenses'}
-                  {userRole === 'lead' && 'Can manage petty cash'}
-                  {userRole === 'general' && 'View-only access'}
-                </span>
-              </div>}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-background/50 backdrop-blur-sm rounded-full border border-border">
-              <span className="text-muted-foreground">Fiscal Year</span>
-              <span className="font-semibold text-foreground">2025-26</span>
-            </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm">
+          {userRole && <div className="flex items-center gap-2">
+            <RoleBadge role={userRole} size="sm" />
+            <span className="text-muted-foreground">
+              {userRole === 'treasurer' && 'Full system access'}
+              {userRole === 'accountant' && 'Can add expenses'}
+              {userRole === 'lead' && 'Can manage petty cash'}
+              {userRole === 'general' && 'View-only access'}
+            </span>
+          </div>}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-background/50 backdrop-blur-sm rounded-full border border-border">
+            <span className="text-muted-foreground">Fiscal Year</span>
+            <span className="font-semibold text-foreground">2025-26</span>
           </div>
         </div>
-
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-0"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl -z-0"></div>
       </div>
 
-      {/* Budget Meter - Hero Section */}
-      <div className="animate-[fade-in_0.6s_ease-out_0.2s_both]">
-        <BudgetMeter budget={stats?.totalBudget || 0} spent={stats?.totalExpenses || 0} />
-      </div>
+      {/* Decorative Elements */}
+      <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-0"></div>
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/10 rounded-full blur-3xl -z-0"></div>
+    </div>
 
-      {/* Over Budget Alert */}
-      <div className="animate-[fade-in_0.6s_ease-out_0.3s_both]">
-        <OverBudgetAlert items={allItemData.filter(item => {
+    {/* Budget Meter - Hero Section */}
+    <div className="animate-[fade-in_0.6s_ease-out_0.2s_both]">
+      <BudgetMeter budget={stats?.totalBudget || 0} spent={stats?.totalExpenses || 0} />
+    </div>
+
+    {/* Over Budget Alert */}
+    <div className="animate-[fade-in_0.6s_ease-out_0.3s_both]">
+      <OverBudgetAlert items={allItemData.filter(item => {
         const proratedBudget = item.budget * 7 / 12; // 7 months elapsed (Apr-Oct)
         return item.amount > proratedBudget;
       }).map(item => ({
@@ -407,104 +482,105 @@ export default function Dashboard() {
         category: item.category,
         committee: item.committee
       }))} />
-      </div>
+    </div>
 
-      {/* Minimal Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-[fade-in_0.6s_ease-out_0.4s_both]">
-        <Card className="border-none shadow-none bg-gradient-to-br from-card to-primary/5 hover:shadow-md transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
-              Total Budget
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.totalBudget || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Annual allocation</p>
-          </CardContent>
-        </Card>
+    {/* Minimal Stats Cards */}
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-[fade-in_0.6s_ease-out_0.4s_both]">
+      <Card className="border-none shadow-none bg-gradient-to-br from-card to-primary/5 hover:shadow-md transition-all">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
+            Total Budget
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.totalBudget || 0)}</div>
+          <p className="text-xs text-muted-foreground mt-1">Annual allocation</p>
+        </CardContent>
+      </Card>
 
-        <Card className="border-none shadow-none bg-gradient-to-br from-card to-accent/5 hover:shadow-md transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
-              Total Expenses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.totalExpenses || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Approved expenses</p>
-          </CardContent>
-        </Card>
+      <Card className="border-none shadow-none bg-gradient-to-br from-card to-accent/5 hover:shadow-md transition-all">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
+            Total Expenses
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.totalExpenses || 0)}</div>
+          <p className="text-xs text-muted-foreground mt-1">Approved expenses</p>
+        </CardContent>
+      </Card>
 
-        <Card className="border-none shadow-none bg-gradient-to-br from-card to-success/5 hover:shadow-md transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
-              Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.balance || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Available funds</p>
-          </CardContent>
-        </Card>
+      <Card className="border-none shadow-none bg-gradient-to-br from-card to-success/5 hover:shadow-md transition-all">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
+            Balance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-lg md:text-xl font-semibold break-words">{formatCurrency(stats?.balance || 0)}</div>
+          <p className="text-xs text-muted-foreground mt-1">Available funds</p>
+        </CardContent>
+      </Card>
 
-        <Card className={`border-none shadow-none bg-gradient-to-br from-card to-warning/5 hover:shadow-md transition-all ${userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'cursor-pointer ring-2 ring-warning/30 animate-pulse hover:ring-warning/50' : ''}`} onClick={() => {
+      <Card className={`border-none shadow-none bg-gradient-to-br from-card to-warning/5 hover:shadow-md transition-all ${userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'cursor-pointer ring-2 ring-warning/30 animate-pulse hover:ring-warning/50' : ''}`} onClick={() => {
         if (userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0) {
           window.location.href = '/approvals';
         }
       }}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
-              Pending Approvals
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-lg md:text-xl font-semibold break-words ${stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'text-warning' : ''}`}>
-              {stats?.pendingApprovals || 0}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'Click to review' : 'Awaiting review'}
-            </p>
-          </CardContent>
-        </Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs md:text-sm font-normal text-muted-foreground">
+            Pending Approvals
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className={`text-lg md:text-xl font-semibold break-words ${stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'text-warning' : ''}`}>
+            {stats?.pendingApprovals || 0}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {userRole === 'treasurer' && stats?.pendingApprovals && stats.pendingApprovals > 0 ? 'Click to review' : 'Awaiting review'}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+
+    {/* Income & Expense Tabs */}
+    <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-semibold text-foreground">Financial Analysis</h2>
+        <Button onClick={refreshCharts} variant="outline" size="sm" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Refresh Charts
+        </Button>
       </div>
 
-      {/* Income & Expense Tabs */}
-      <div className="space-y-4 animate-[fade-in_0.6s_ease-out_0.5s_both]">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-semibold text-foreground">Financial Analysis</h2>
-          <Button onClick={refreshCharts} variant="outline" size="sm" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Refresh Charts
-          </Button>
-        </div>
+      <Tabs defaultValue="expense" className="w-full">
+        <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-6">
+          <TabsTrigger value="expense">Expense</TabsTrigger>
+          <TabsTrigger value="income">Income</TabsTrigger>
+          <TabsTrigger value="petty-cash">Petty Cash</TabsTrigger>
+        </TabsList>
 
-        <Tabs defaultValue="expense" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
-            <TabsTrigger value="expense">Expense</TabsTrigger>
-            <TabsTrigger value="income">Income</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="expense" className="space-y-6 mt-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="w-full overflow-hidden">
-                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
-                  <CardContent className="p-0">
-                    <MonthlyExpenseChart key={`monthly-${chartKey}`} data={monthlyData} />
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="w-full overflow-hidden">
-                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
-                  <CardContent className="p-0">
-                    <ItemWiseExpenseChart key={`item-${chartKey}`} data={itemData} allCategories={allCategories} allCommittees={allCommittees} onCategoryChange={handleCategoryFilter} onCommitteeChange={handleCommitteeFilter} />
-                  </CardContent>
-                </Card>
-              </div>
+        <TabsContent value="expense" className="space-y-6 mt-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="w-full overflow-hidden">
+              <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-primary/5">
+                <CardContent className="p-0">
+                  <MonthlyExpenseChart key={`monthly-${chartKey}`} data={monthlyData} />
+                </CardContent>
+              </Card>
             </div>
+            <div className="w-full overflow-hidden">
+              <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-accent/5">
+                <CardContent className="p-0">
+                  <ItemWiseExpenseChart key={`item-${chartKey}`} data={itemData} allCategories={allCategories} allCommittees={allCommittees} onCategoryChange={handleCategoryFilter} onCommitteeChange={handleCommitteeFilter} />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
 
-            {/* Item-wise Budget Analysis */}
-            <div className="w-full">
-              <ItemAnalysisCard items={allItemData.map(item => ({
+          {/* Item-wise Budget Analysis */}
+          <div className="w-full">
+            <ItemAnalysisCard items={allItemData.map(item => ({
               item_name: item.item_name,
               full_item_name: item.full_item_name,
               budget: item.budget,
@@ -516,28 +592,35 @@ export default function Dashboard() {
               // Apr - Oct 2025
               monthsRemaining: 5 // Nov - Mar 2026
             }))} />
-            </div>
-          </TabsContent>
+          </div>
+        </TabsContent>
 
-          <TabsContent value="income" className="space-y-6 mt-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="w-full overflow-hidden">
-                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-2/5">
-                  <CardContent className="p-0">
-                    <MonthlyIncomeChart key={`monthly-income-${chartKey}`} data={monthlyIncomeData} />
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="w-full overflow-hidden">
-                <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-3/5">
-                  <CardContent className="p-0">
-                    <CategoryWiseIncomeChart key={`category-income-${chartKey}`} data={categoryIncomeData} />
-                  </CardContent>
-                </Card>
-              </div>
+        <TabsContent value="income" className="space-y-6 mt-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="w-full overflow-hidden">
+              <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-2/5">
+                <CardContent className="p-0">
+                  <MonthlyIncomeChart key={`monthly-income-${chartKey}`} data={monthlyIncomeData} />
+                </CardContent>
+              </Card>
             </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>;
+            <div className="w-full overflow-hidden">
+              <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-chart-3/5">
+                <CardContent className="p-0">
+                  <CategoryWiseIncomeChart key={`category-income-${chartKey}`} data={categoryIncomeData} />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="petty-cash" className="space-y-6 mt-6">
+          <PettyCashAnalytics
+            monthlyData={monthlyPettyCashData}
+            itemData={pettyCashItemData}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  </div>;
 }
