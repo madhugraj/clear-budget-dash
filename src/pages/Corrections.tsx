@@ -139,11 +139,19 @@ export default function Corrections() {
   const [editIncomeDate, setEditIncomeDate] = useState<string>('');
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
 
+  // Petty Cash Edit States
+  const [selectedPettyCash, setSelectedPettyCash] = useState<PettyCash | null>(null);
+  const [editPettyCashMode, setEditPettyCashMode] = useState(false);
+  const [editPettyCashItemName, setEditPettyCashItemName] = useState<string>('');
+  const [editPettyCashDescription, setEditPettyCashDescription] = useState<string>('');
+  const [editPettyCashAmount, setEditPettyCashAmount] = useState<string>('');
+  const [editPettyCashDate, setEditPettyCashDate] = useState<string>('');
+
   // Delete Confirmation State
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean;
     id: string;
-    type: 'expense' | 'income';
+    type: 'expense' | 'income' | 'petty_cash';
     description: string;
   }>({ isOpen: false, id: '', type: 'expense', description: '' });
   const [deleting, setDeleting] = useState(false);
@@ -549,6 +557,15 @@ export default function Corrections() {
     }
   };
 
+  const handleTreasurerEditPettyCash = (pettyCash: PettyCash) => {
+    setSelectedPettyCash(pettyCash);
+    setEditPettyCashMode(true);
+    setEditPettyCashItemName(pettyCash.item_name);
+    setEditPettyCashDescription(pettyCash.description || '');
+    setEditPettyCashAmount(pettyCash.amount.toString());
+    setEditPettyCashDate(pettyCash.date);
+  };
+
   const handleSaveCorrection = async () => {
     if (!selectedExpense) return;
 
@@ -676,7 +693,47 @@ export default function Corrections() {
     }
   };
 
-  const handleDeleteClick = (id: string, type: 'expense' | 'income', description: string) => {
+  const handleSavePettyCashCorrection = async () => {
+    if (!selectedPettyCash) return;
+
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('petty_cash')
+        .update({
+          item_name: editPettyCashItemName,
+          description: editPettyCashDescription,
+          amount: parseFloat(editPettyCashAmount),
+          date: editPettyCashDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedPettyCash.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Petty cash updated',
+        description: 'The petty cash record has been updated successfully',
+      });
+
+      setSelectedPettyCash(null);
+      setEditPettyCashMode(false);
+      await loadHistoricalPettyCash();
+    } catch (error: any) {
+      toast({
+        title: 'Error saving petty cash',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteClick = (id: string, type: 'expense' | 'income' | 'petty_cash', description: string) => {
     setDeleteConfirmation({
       isOpen: true,
       id,
@@ -690,7 +747,11 @@ export default function Corrections() {
 
     setDeleting(true);
     try {
-      const table = deleteConfirmation.type === 'expense' ? 'expenses' : 'income_actuals';
+      const table = deleteConfirmation.type === 'expense' 
+        ? 'expenses' 
+        : deleteConfirmation.type === 'income' 
+        ? 'income_actuals'
+        : 'petty_cash';
 
       const { error } = await supabase
         .from(table)
@@ -708,8 +769,10 @@ export default function Corrections() {
 
       if (deleteConfirmation.type === 'expense') {
         await loadHistoricalExpenses();
-      } else {
+      } else if (deleteConfirmation.type === 'income') {
         await loadHistoricalIncome();
+      } else {
+        await loadHistoricalPettyCash();
       }
     } catch (error: any) {
       toast({
@@ -1270,6 +1333,9 @@ export default function Corrections() {
                             <TableHead>Description</TableHead>
                             <TableHead>Submitted By</TableHead>
                             <TableHead className="text-right">Amount</TableHead>
+                            {userRole === 'treasurer' && (
+                              <TableHead className="text-center">Actions</TableHead>
+                            )}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1288,6 +1354,27 @@ export default function Corrections() {
                               <TableCell className="text-right text-sm font-medium">
                                 {formatCurrency(item.amount)}
                               </TableCell>
+                              {userRole === 'treasurer' && (
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleTreasurerEditPettyCash(item)}
+                                  >
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteClick(item.id, 'petty_cash', item.item_name)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </TableCell>
+                              )}
                             </TableRow>
                           ))}
                         </TableBody>
@@ -1688,6 +1775,87 @@ export default function Corrections() {
           )}
         </DialogContent>
       </Dialog >
+
+      {/* Petty Cash Edit Dialog */}
+      < Dialog open={editPettyCashMode} onOpenChange={() => { setSelectedPettyCash(null); setEditPettyCashMode(false); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Petty Cash</DialogTitle>
+            <DialogDescription>
+              Make changes to this petty cash record.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPettyCash && (
+            <form onSubmit={(e) => { e.preventDefault(); handleSavePettyCashCorrection(); }} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-petty-item">Item Name *</Label>
+                <Input
+                  id="edit-petty-item"
+                  value={editPettyCashItemName}
+                  onChange={(e) => setEditPettyCashItemName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-petty-desc">Description</Label>
+                <Textarea
+                  id="edit-petty-desc"
+                  value={editPettyCashDescription}
+                  onChange={(e) => setEditPettyCashDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-petty-amount">Amount *</Label>
+                  <Input
+                    id="edit-petty-amount"
+                    type="number"
+                    step="0.01"
+                    value={editPettyCashAmount}
+                    onChange={(e) => setEditPettyCashAmount(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-petty-date">Date *</Label>
+                  <Input
+                    id="edit-petty-date"
+                    type="date"
+                    value={editPettyCashDate}
+                    onChange={(e) => setEditPettyCashDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button type="submit" disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => { setSelectedPettyCash(null); setEditPettyCashMode(false); }}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog >
+
       <AlertDialog open={deleteConfirmation.isOpen} onOpenChange={(open) => setDeleteConfirmation({ ...deleteConfirmation, isOpen: open })}>
         <AlertDialogContent>
           <AlertDialogHeader>
