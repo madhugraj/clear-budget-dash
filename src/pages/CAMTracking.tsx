@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Save, Upload, Building2, AlertCircle } from 'lucide-react';
+import { Loader2, Save, Upload, Building2, AlertCircle, Download } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
@@ -32,18 +32,25 @@ const TOWER_TOTAL_FLATS: Record<string, number> = {
 
 const TOTAL_FLATS_IN_COMPLEX = 2613;
 
-const QUARTERS = [
-  { value: 1, label: 'Q1 (Jan-Mar)' },
-  { value: 2, label: 'Q2 (Apr-Jun)' },
-  { value: 3, label: 'Q3 (Jul-Sep)' },
-  { value: 4, label: 'Q4 (Oct-Dec)' }
+// Fiscal Year Quarters (Q1 starts April)
+const FISCAL_QUARTERS = [
+  { value: 1, label: 'Q1 (Apr-Jun)', months: [4, 5, 6] },
+  { value: 2, label: 'Q2 (Jul-Sep)', months: [7, 8, 9] },
+  { value: 3, label: 'Q3 (Oct-Dec)', months: [10, 11, 12] },
+  { value: 4, label: 'Q4 (Jan-Mar)', months: [1, 2, 3] }
 ];
+
+const MONTH_NAMES: Record<number, string> = {
+  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+};
 
 interface CAMData {
   id?: string;
   tower: string;
   year: number;
   quarter: number;
+  month?: number;
   paid_flats: number;
   pending_flats: number;
   total_flats: number;
@@ -56,46 +63,84 @@ export default function CAMTracking() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil((new Date().getMonth() + 1) / 3));
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()); // Fiscal Year
+  const [selectedQuarter, setSelectedQuarter] = useState(1); // Default to Q1
   const [selectedTower, setSelectedTower] = useState<string>('1A');
-  const [camData, setCamData] = useState<Record<string, CAMData>>({});
-  const [existingData, setExistingData] = useState<CAMData[]>([]);
+  // Map: Tower -> Month -> Data
+  const [camData, setCamData] = useState<Record<string, Record<number, CAMData>>>({});
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const years = Array.from({ length: new Date().getFullYear() - 2023 }, (_, i) => 2024 + i);
 
   useEffect(() => {
+    fetchUserRole();
+  }, [user]);
+
+  useEffect(() => {
     fetchCAMData();
   }, [selectedYear, selectedQuarter]);
+
+  const fetchUserRole = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+    setUserRole(data?.role || null);
+  };
+
+  const getCalendarYearAndMonths = () => {
+    const quarterConfig = FISCAL_QUARTERS.find(q => q.value === selectedQuarter);
+    if (!quarterConfig) return { year: selectedYear, months: [] };
+
+    const months = quarterConfig.months;
+    // If Q4 (Jan-Mar), it falls in the next calendar year
+    const calendarYear = selectedQuarter === 4 ? selectedYear + 1 : selectedYear;
+
+    return { calendarYear, months };
+  };
 
   const fetchCAMData = async () => {
     setLoading(true);
     try {
+      const { calendarYear, months } = getCalendarYearAndMonths();
+
+      // We need to fetch data for the specific months
+      // Since we might have mixed years (e.g. if we selected Q4, we want Jan-Mar of next year)
+      // But wait, if I select FY2024 Q4, I want Jan-Mar 2025.
+
       const { data, error } = await supabase
         .from('cam_tracking')
         .select('*')
-        .eq('year', selectedYear)
-        .eq('quarter', selectedQuarter);
+        .in('month', months)
+        .eq('year', calendarYear);
 
       if (error) throw error;
 
-      const dataMap: Record<string, CAMData> = {};
+      const dataMap: Record<string, Record<number, CAMData>> = {};
+
+      // Initialize structure
       TOWERS.forEach(tower => {
-        const existing = data?.find(d => d.tower === tower);
-        dataMap[tower] = existing || {
-          tower,
-          year: selectedYear,
-          quarter: selectedQuarter,
-          paid_flats: 0,
-          pending_flats: 0,
-          total_flats: TOWER_TOTAL_FLATS[tower],
-          dues_cleared_from_previous: 0,
-          advance_payments: 0
-        };
+        dataMap[tower] = {};
+        months.forEach(month => {
+          const existing = data?.find(d => d.tower === tower && d.month === month);
+          dataMap[tower][month] = existing || {
+            tower,
+            year: calendarYear,
+            quarter: Math.ceil(month / 3), // Calendar Quarter (1-4)
+            month,
+            paid_flats: 0,
+            pending_flats: 0,
+            total_flats: TOWER_TOTAL_FLATS[tower],
+            dues_cleared_from_previous: 0,
+            advance_payments: 0
+          };
+        });
       });
+
       setCamData(dataMap);
-      setExistingData(data || []);
       setValidationErrors({});
     } catch (error: any) {
       toast.error('Failed to fetch CAM data: ' + error.message);
@@ -104,97 +149,103 @@ export default function CAMTracking() {
     }
   };
 
-  const validateTowerData = (tower: string, data: CAMData): string | null => {
+  const validateTowerData = (tower: string, month: number, data: CAMData): string | null => {
     const maxFlats = TOWER_TOTAL_FLATS[tower];
-    
+
     if (data.paid_flats < 0 || data.pending_flats < 0) {
       return 'Values cannot be negative';
     }
-    
+
     if (data.paid_flats > maxFlats) {
       return `Paid flats cannot exceed ${maxFlats} for tower ${tower}`;
     }
-    
+
     if (data.pending_flats > maxFlats) {
       return `Pending flats cannot exceed ${maxFlats} for tower ${tower}`;
     }
-    
+
     if (data.paid_flats + data.pending_flats > maxFlats) {
-      return `Total (paid + pending) cannot exceed ${maxFlats} flats`;
+      return `Total (paid + pending) cannot exceed ${maxFlats} flats in ${MONTH_NAMES[month]}`;
     }
-    
+
     return null;
   };
 
   const handleInputChange = (
-    tower: string, 
-    field: 'paid_flats' | 'pending_flats' | 'dues_cleared_from_previous' | 'advance_payments', 
+    tower: string,
+    month: number,
+    field: 'paid_flats' | 'pending_flats' | 'dues_cleared_from_previous' | 'advance_payments',
     value: string
   ) => {
     const numValue = parseInt(value) || 0;
-    const updatedData = {
-      ...camData[tower],
+    const currentMonthData = camData[tower][month];
+
+    const updatedMonthData = {
+      ...currentMonthData,
       [field]: numValue,
       total_flats: TOWER_TOTAL_FLATS[tower]
     };
-    
+
     setCamData(prev => ({
       ...prev,
-      [tower]: updatedData
+      [tower]: {
+        ...prev[tower],
+        [month]: updatedMonthData
+      }
     }));
 
-    const error = validateTowerData(tower, updatedData);
+    const error = validateTowerData(tower, month, updatedMonthData);
     setValidationErrors(prev => ({
       ...prev,
-      [tower]: error || ''
+      [`${tower}-${month}`]: error || ''
     }));
   };
 
   const handleSaveTower = async (tower: string) => {
     if (!user) return;
-    
-    const data = camData[tower];
-    const error = validateTowerData(tower, data);
-    if (error) {
-      toast.error(error);
-      return;
+
+    const { months } = getCalendarYearAndMonths();
+    const towerMonthsData = camData[tower];
+
+    // Validate all months first
+    for (const month of months) {
+      const error = validateTowerData(tower, month, towerMonthsData[month]);
+      if (error) {
+        toast.error(`Error in ${MONTH_NAMES[month]}: ${error}`);
+        return;
+      }
     }
 
     setSaving(true);
     try {
-      const item = {
-        tower: data.tower,
-        year: selectedYear,
-        quarter: selectedQuarter,
-        paid_flats: data.paid_flats,
-        pending_flats: data.pending_flats,
-        total_flats: TOWER_TOTAL_FLATS[tower],
-        dues_cleared_from_previous: data.dues_cleared_from_previous || 0,
-        advance_payments: data.advance_payments || 0,
-        notes: data.notes || null,
-        uploaded_by: user.id
-      };
+      const upsertData = months.map(month => {
+        const data = towerMonthsData[month];
+        return {
+          tower: data.tower,
+          year: data.year,
+          quarter: data.quarter, // Calendar quarter
+          month: month,
+          paid_flats: data.paid_flats,
+          pending_flats: data.pending_flats,
+          total_flats: TOWER_TOTAL_FLATS[tower],
+          dues_cleared_from_previous: data.dues_cleared_from_previous || 0,
+          advance_payments: data.advance_payments || 0,
+          notes: data.notes || null,
+          uploaded_by: user.id
+        };
+      });
 
-      const existing = existingData.find(d => d.tower === tower);
-      if (existing?.id) {
-        const { error } = await supabase
-          .from('cam_tracking')
-          .update({
-            paid_flats: item.paid_flats,
-            pending_flats: item.pending_flats,
-            total_flats: item.total_flats,
-            dues_cleared_from_previous: item.dues_cleared_from_previous,
-            advance_payments: item.advance_payments,
-            notes: item.notes
-          })
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('cam_tracking')
-          .insert(item);
-        if (error) throw error;
-      }
+      // We need to upsert each record. 
+      // Since we have a unique constraint on (tower, year, month), we can use upsert.
+      // However, we need to handle the ID if it exists to avoid creating new IDs if not needed, 
+      // but upsert handles that if we match the unique key? 
+      // Supabase upsert matches on Primary Key by default, or we can specify `onConflict`.
+
+      const { error } = await supabase
+        .from('cam_tracking')
+        .upsert(upsertData, { onConflict: 'tower, year, month' });
+
+      if (error) throw error;
 
       toast.success(`Tower ${tower} data saved successfully`);
       fetchCAMData();
@@ -203,6 +254,33 @@ export default function CAMTracking() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!camData) return;
+
+    const { months } = getCalendarYearAndMonths();
+    const exportData: any[] = [];
+
+    TOWERS.forEach(tower => {
+      const row: any = { Tower: tower };
+      months.forEach(month => {
+        const data = camData[tower]?.[month];
+        if (data) {
+          const mName = MONTH_NAMES[month];
+          row[`${mName} Paid`] = data.paid_flats;
+          row[`${mName} Pending`] = data.pending_flats;
+          row[`${mName} Dues Cleared`] = data.dues_cleared_from_previous;
+          row[`${mName} Advance`] = data.advance_payments;
+        }
+      });
+      exportData.push(row);
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "CAM Data");
+    XLSX.writeFile(wb, `CAM_Report_FY${selectedYear}_Q${selectedQuarter}.xlsx`);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, tower: string) => {
@@ -218,28 +296,51 @@ export default function CAMTracking() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-        if (jsonData.length > 0) {
-          const row = jsonData[0];
-          const updatedData = {
-            ...camData[tower],
-            paid_flats: parseInt(row.Paid || row.paid || row.PAID || row['Paid Flats'] || 0),
-            pending_flats: parseInt(row.Pending || row.pending || row.PENDING || row['Pending Flats'] || 0),
-            dues_cleared_from_previous: parseInt(row['Dues Cleared'] || row.dues_cleared || 0),
-            advance_payments: parseInt(row['Advance'] || row.advance || row['Advance Payments'] || 0),
-            total_flats: TOWER_TOTAL_FLATS[tower]
-          };
-          
-          const error = validateTowerData(tower, updatedData);
-          if (error) {
-            toast.error(`Validation error: ${error}`);
-            return;
+        // Expecting rows to have Month column or we assume order?
+        // Let's assume the user uploads a file with columns like: Month, Paid, Pending...
+        // Or one row per month.
+
+        // For simplicity, let's assume the file has 3 rows, one for each month of the quarter.
+        // Or we look for a 'Month' column.
+
+        const { months } = getCalendarYearAndMonths();
+
+        const updatedTowerData = { ...camData[tower] };
+        let hasUpdates = false;
+
+        jsonData.forEach(row => {
+          // Try to match month
+          const rowMonthStr = row.Month || row.month;
+          let monthNum = -1;
+
+          if (typeof rowMonthStr === 'string') {
+            // Simple parsing logic
+            const m = rowMonthStr.slice(0, 3);
+            monthNum = parseInt(Object.keys(MONTH_NAMES).find(key => MONTH_NAMES[parseInt(key)] === m) || '-1');
+          } else if (typeof rowMonthStr === 'number') {
+            monthNum = rowMonthStr;
           }
-          
+
+          if (monthNum !== -1 && months.includes(monthNum)) {
+            updatedTowerData[monthNum] = {
+              ...updatedTowerData[monthNum],
+              paid_flats: parseInt(row.Paid || row.paid || 0),
+              pending_flats: parseInt(row.Pending || row.pending || 0),
+              dues_cleared_from_previous: parseInt(row['Dues Cleared'] || row.dues_cleared || 0),
+              advance_payments: parseInt(row['Advance'] || row.advance || 0),
+            };
+            hasUpdates = true;
+          }
+        });
+
+        if (hasUpdates) {
           setCamData(prev => ({
             ...prev,
-            [tower]: updatedData
+            [tower]: updatedTowerData
           }));
           toast.success(`Data loaded for Tower ${tower}. Review and save.`);
+        } else {
+          toast.warning('No matching month data found in file. Ensure "Month" column exists (e.g. "Apr", "May").');
         }
       };
       reader.readAsBinaryString(file);
@@ -249,7 +350,11 @@ export default function CAMTracking() {
     event.target.value = '';
   };
 
-  const getTowerData = (tower: string) => camData[tower] || {
+  const getTowerMonthData = (tower: string, month: number) => camData[tower]?.[month] || {
+    tower,
+    year: selectedYear,
+    quarter: selectedQuarter,
+    month,
     paid_flats: 0,
     pending_flats: 0,
     total_flats: TOWER_TOTAL_FLATS[tower],
@@ -308,7 +413,7 @@ export default function CAMTracking() {
                   </SelectTrigger>
                   <SelectContent>
                     {years.map(year => (
-                      <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                      <SelectItem key={year} value={String(year)}>FY {year}-{year + 1}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -317,7 +422,7 @@ export default function CAMTracking() {
                     <SelectValue placeholder="Quarter" />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUARTERS.map(q => (
+                    {FISCAL_QUARTERS.map(q => (
                       <SelectItem key={q.value} value={String(q.value)}>{q.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -328,64 +433,67 @@ export default function CAMTracking() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Tower {selectedTower} has <strong>{TOWER_TOTAL_FLATS[selectedTower]}</strong> total flats. 
+                  Tower {selectedTower} has <strong>{TOWER_TOTAL_FLATS[selectedTower]}</strong> total flats.
                   Paid + Pending cannot exceed this limit.
                 </AlertDescription>
               </Alert>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Paid Flats (Current Quarter)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={TOWER_TOTAL_FLATS[selectedTower]}
-                    value={getTowerData(selectedTower).paid_flats || ''}
-                    onChange={(e) => handleInputChange(selectedTower, 'paid_flats', e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Pending Flats (Current Quarter)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={TOWER_TOTAL_FLATS[selectedTower]}
-                    value={getTowerData(selectedTower).pending_flats || ''}
-                    onChange={(e) => handleInputChange(selectedTower, 'pending_flats', e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Dues Cleared from Previous Quarters</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={getTowerData(selectedTower).dues_cleared_from_previous || ''}
-                    onChange={(e) => handleInputChange(selectedTower, 'dues_cleared_from_previous', e.target.value)}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">Residents who cleared past dues this quarter</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Advance Payments</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={getTowerData(selectedTower).advance_payments || ''}
-                    onChange={(e) => handleInputChange(selectedTower, 'advance_payments', e.target.value)}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">Residents who paid in advance for future quarters</p>
-                </div>
+              <div className="space-y-6">
+                {getCalendarYearAndMonths().months.map(month => (
+                  <div key={month} className="p-4 border rounded-lg bg-muted/20">
+                    <h3 className="font-semibold mb-3 text-primary">{MONTH_NAMES[month]}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Paid Flats</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={TOWER_TOTAL_FLATS[selectedTower]}
+                          value={getTowerMonthData(selectedTower, month).paid_flats || ''}
+                          onChange={(e) => handleInputChange(selectedTower, month, 'paid_flats', e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Pending Flats</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={TOWER_TOTAL_FLATS[selectedTower]}
+                          value={getTowerMonthData(selectedTower, month).pending_flats || ''}
+                          onChange={(e) => handleInputChange(selectedTower, month, 'pending_flats', e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Dues Cleared</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={getTowerMonthData(selectedTower, month).dues_cleared_from_previous || ''}
+                          onChange={(e) => handleInputChange(selectedTower, month, 'dues_cleared_from_previous', e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Advance</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={getTowerMonthData(selectedTower, month).advance_payments || ''}
+                          onChange={(e) => handleInputChange(selectedTower, month, 'advance_payments', e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    {validationErrors[`${selectedTower}-${month}`] && (
+                      <p className="text-sm text-destructive mt-2">{validationErrors[`${selectedTower}-${month}`]}</p>
+                    )}
+                  </div>
+                ))}
               </div>
 
-              {validationErrors[selectedTower] && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{validationErrors[selectedTower]}</AlertDescription>
-                </Alert>
-              )}
+
 
               <div className="flex items-center gap-3 pt-4 border-t">
                 <div className="relative">
@@ -400,8 +508,8 @@ export default function CAMTracking() {
                     Upload for Tower {selectedTower}
                   </Button>
                 </div>
-                <Button 
-                  onClick={() => handleSaveTower(selectedTower)} 
+                <Button
+                  onClick={() => handleSaveTower(selectedTower)}
                   disabled={saving || !!validationErrors[selectedTower]}
                 >
                   {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
@@ -416,15 +524,21 @@ export default function CAMTracking() {
           <Card>
             <CardHeader className="pb-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <CardTitle className="text-lg">All Towers - {QUARTERS.find(q => q.value === selectedQuarter)?.label} {selectedYear}</CardTitle>
+                <CardTitle className="text-lg">All Towers - {FISCAL_QUARTERS.find(q => q.value === selectedQuarter)?.label} {selectedYear}</CardTitle>
                 <div className="flex items-center gap-3">
+                  {(userRole === 'treasurer' || userRole === 'lead') && (
+                    <Button variant="outline" size="sm" onClick={handleDownload}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Report
+                    </Button>
+                  )}
                   <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder="Year" />
                     </SelectTrigger>
                     <SelectContent>
                       {years.map(year => (
-                        <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        <SelectItem key={year} value={String(year)}>FY {year}-{year + 1}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -433,7 +547,7 @@ export default function CAMTracking() {
                       <SelectValue placeholder="Quarter" />
                     </SelectTrigger>
                     <SelectContent>
-                      {QUARTERS.map(q => (
+                      {FISCAL_QUARTERS.map(q => (
                         <SelectItem key={q.value} value={String(q.value)}>{q.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -448,52 +562,55 @@ export default function CAMTracking() {
                     <TableRow>
                       <TableHead className="w-[80px]">Tower</TableHead>
                       <TableHead className="w-[80px]">Total</TableHead>
-                      <TableHead className="w-[90px]">Paid</TableHead>
-                      <TableHead className="w-[90px]">Pending</TableHead>
-                      <TableHead className="w-[110px]">Dues Cleared</TableHead>
-                      <TableHead className="w-[90px]">Advance</TableHead>
-                      <TableHead className="w-[90px]">Status</TableHead>
+                      {getCalendarYearAndMonths().months.map(m => (
+                        <TableHead key={m} className="text-center border-l" colSpan={2}>{MONTH_NAMES[m]}</TableHead>
+                      ))}
+                    </TableRow>
+                    <TableRow>
+                      <TableHead></TableHead>
+                      <TableHead></TableHead>
+                      {getCalendarYearAndMonths().months.map(m => (
+                        <>
+                          <TableHead key={`${m}-paid`} className="text-xs text-center border-l text-green-600">Paid</TableHead>
+                          <TableHead key={`${m}-pending`} className="text-xs text-center text-red-600">Pending</TableHead>
+                        </>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {TOWERS.map(tower => {
-                      const data = getTowerData(tower);
                       const maxFlats = TOWER_TOTAL_FLATS[tower];
-                      const isValid = data.paid_flats + data.pending_flats <= maxFlats;
+                      const months = getCalendarYearAndMonths().months;
+
                       return (
-                        <TableRow key={tower} className={!isValid ? 'bg-destructive/10' : ''}>
+                        <TableRow key={tower}>
                           <TableCell className="font-medium">{tower}</TableCell>
                           <TableCell>{maxFlats}</TableCell>
-                          <TableCell className="text-green-600">{data.paid_flats}</TableCell>
-                          <TableCell className="text-red-600">{data.pending_flats}</TableCell>
-                          <TableCell className="text-blue-600">{data.dues_cleared_from_previous || 0}</TableCell>
-                          <TableCell className="text-purple-600">{data.advance_payments || 0}</TableCell>
-                          <TableCell>
-                            {isValid ? (
-                              <span className="text-xs text-green-600">✓ Valid</span>
-                            ) : (
-                              <span className="text-xs text-destructive">⚠ Exceeds</span>
-                            )}
-                          </TableCell>
+                          {months.map(m => {
+                            const data = getTowerMonthData(tower, m);
+                            return (
+                              <>
+                                <TableCell className="text-center border-l text-green-600">{data.paid_flats}</TableCell>
+                                <TableCell className="text-center text-red-600">{data.pending_flats}</TableCell>
+                              </>
+                            );
+                          })}
                         </TableRow>
                       );
                     })}
                     <TableRow className="bg-muted/50 font-semibold">
                       <TableCell>Total</TableCell>
                       <TableCell>{TOTAL_FLATS_IN_COMPLEX}</TableCell>
-                      <TableCell className="text-green-600">
-                        {Object.values(camData).reduce((sum, d) => sum + (d.paid_flats || 0), 0)}
-                      </TableCell>
-                      <TableCell className="text-red-600">
-                        {Object.values(camData).reduce((sum, d) => sum + (d.pending_flats || 0), 0)}
-                      </TableCell>
-                      <TableCell className="text-blue-600">
-                        {Object.values(camData).reduce((sum, d) => sum + (d.dues_cleared_from_previous || 0), 0)}
-                      </TableCell>
-                      <TableCell className="text-purple-600">
-                        {Object.values(camData).reduce((sum, d) => sum + (d.advance_payments || 0), 0)}
-                      </TableCell>
-                      <TableCell></TableCell>
+                      {getCalendarYearAndMonths().months.map(m => {
+                        const totalPaid = Object.values(camData).reduce((sum, tData) => sum + (tData[m]?.paid_flats || 0), 0);
+                        const totalPending = Object.values(camData).reduce((sum, tData) => sum + (tData[m]?.pending_flats || 0), 0);
+                        return (
+                          <>
+                            <TableCell className="text-center border-l text-green-600">{totalPaid}</TableCell>
+                            <TableCell className="text-center text-red-600">{totalPending}</TableCell>
+                          </>
+                        );
+                      })}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -524,12 +641,11 @@ function QuarterlySummary() {
   const fetchSummary = async () => {
     setLoading(true);
     try {
+      // Fetch data for the fiscal year (Apr of selectedYear to Mar of selectedYear + 1)
       const { data, error } = await supabase
         .from('cam_tracking')
         .select('*')
-        .eq('year', selectedYear)
-        .order('quarter')
-        .order('tower');
+        .or(`and(year.eq.${selectedYear},month.gte.4),and(year.eq.${selectedYear + 1},month.lte.3)`);
 
       if (error) throw error;
       setSummaryData(data || []);
@@ -541,13 +657,29 @@ function QuarterlySummary() {
   };
 
   const getQuarterTotals = (quarter: number) => {
-    const qData = summaryData.filter(d => d.quarter === quarter);
+    const quarterConfig = FISCAL_QUARTERS.find(q => q.value === quarter);
+    if (!quarterConfig) return { paid: 0, pending: 0, duesCleared: 0, advance: 0, total: TOTAL_FLATS_IN_COMPLEX };
+
+    const qData = summaryData.filter(d => quarterConfig.months.includes(d.month || 0));
+
+    // For total flats, we shouldn't sum them up across months, as it's the same flats.
+    // But paid/pending are cumulative? 
+    // Wait, if I pay for April and May, my total paid is sum of both.
+    // Total flats for the quarter? 
+    // Usually "Total Flats" is constant for the complex.
+    // But if we are showing "Collection Rate", it should be (Total Paid / (Total Flats * 3))?
+    // Or is it (Total Paid / Total Demand)?
+    // Total Demand for a quarter = Total Flats * 3 (if monthly billing).
+    // Let's assume Total Demand = Total Flats * 3.
+
+    const totalDemand = TOTAL_FLATS_IN_COMPLEX * 3;
+
     return {
       paid: qData.reduce((sum, d) => sum + d.paid_flats, 0),
       pending: qData.reduce((sum, d) => sum + d.pending_flats, 0),
       duesCleared: qData.reduce((sum, d) => sum + (d.dues_cleared_from_previous || 0), 0),
       advance: qData.reduce((sum, d) => sum + (d.advance_payments || 0), 0),
-      total: TOTAL_FLATS_IN_COMPLEX
+      total: totalDemand
     };
   };
 
@@ -568,14 +700,14 @@ function QuarterlySummary() {
           </SelectTrigger>
           <SelectContent>
             {years.map(year => (
-              <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+              <SelectItem key={year} value={String(year)}>FY {year}-{year + 1}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {QUARTERS.map(q => {
+        {FISCAL_QUARTERS.map(q => {
           const totals = getQuarterTotals(q.value);
           return (
             <Card key={q.value}>
@@ -584,7 +716,7 @@ function QuarterlySummary() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total Flats:</span>
+                  <span className="text-muted-foreground">Total Demand (3 months):</span>
                   <span className="font-medium">{totals.total}</span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -627,8 +759,8 @@ function QuarterlySummary() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Tower</TableHead>
-                  <TableHead className="text-center">Total</TableHead>
-                  {QUARTERS.map(q => (
+                  <TableHead className="text-center">Total Flats</TableHead>
+                  {FISCAL_QUARTERS.map(q => (
                     <TableHead key={q.value} className="text-center">{q.label}</TableHead>
                   ))}
                 </TableRow>
@@ -638,15 +770,21 @@ function QuarterlySummary() {
                   <TableRow key={tower}>
                     <TableCell className="font-medium">{tower}</TableCell>
                     <TableCell className="text-center">{TOWER_TOTAL_FLATS[tower]}</TableCell>
-                    {QUARTERS.map(q => {
-                      const towerData = summaryData.find(d => d.tower === tower && d.quarter === q.value);
+                    {FISCAL_QUARTERS.map(q => {
+                      const qMonths = q.months;
+                      const towerData = summaryData.filter(d => d.tower === tower && qMonths.includes(d.month || 0));
+                      const totalPending = towerData.reduce((sum, d) => sum + d.pending_flats, 0);
+
+                      // Note: Summing pending flats across months might be misleading if it's the same flat pending for 3 months.
+                      // But "Pending Flats" usually means "Number of flats that haven't paid for this month".
+                      // So if Flat 101 didn't pay for Apr, May, Jun -> it contributes 1 to each month's pending count.
+                      // So Sum is correct for "Total Pending Instances".
+
                       return (
                         <TableCell key={q.value} className="text-center">
-                          {towerData ? (
-                            <span className={towerData.pending_flats > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>
-                              {towerData.pending_flats}
-                            </span>
-                          ) : '-'}
+                          <span className={totalPending > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>
+                            {totalPending}
+                          </span>
                         </TableCell>
                       );
                     })}
