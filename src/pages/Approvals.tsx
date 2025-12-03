@@ -759,7 +759,7 @@ export default function Approvals() {
                       <div className="space-y-1">
                         <div className="font-medium">{expense.description}</div>
                         <div className="text-sm text-muted-foreground">
-                          {expense.profiles.full_name} • {new Date(expense.expense_date).toLocaleDateString()}
+                          {expense.profiles?.full_name || 'Unknown'} • {new Date(expense.expense_date).toLocaleDateString()}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {expense.budget_master?.item_name} ({expense.budget_master?.category})
@@ -867,7 +867,7 @@ export default function Approvals() {
                           {income.income_categories?.subcategory_name && ` - ${income.income_categories.subcategory_name}`}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {income.profiles.full_name} • {new Date(income.created_at).toLocaleDateString()}
+                          {income.profiles?.full_name || 'Unknown'} • {new Date(income.created_at).toLocaleDateString()}
                         </div>
                         <div className="text-sm font-medium text-primary">
                           {getMonthName(income.month)} {income.fiscal_year}
@@ -924,7 +924,7 @@ export default function Approvals() {
                       <div className="space-y-1">
                         <div className="font-medium">{request.description}</div>
                         <div className="text-sm text-muted-foreground">
-                          {request.profiles.full_name} • {new Date(request.expense_date).toLocaleDateString()}
+                          {request.profiles?.full_name || 'Unknown'} • {new Date(request.expense_date).toLocaleDateString()}
                         </div>
                         <div className="text-sm text-red-500 flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
@@ -1104,7 +1104,7 @@ export default function Approvals() {
                               <TableCell>{new Date(expense.expense_date).toLocaleDateString()}</TableCell>
                               <TableCell>{expense.description}</TableCell>
                               <TableCell>{expense.budget_master?.category}</TableCell>
-                              <TableCell>{expense.profiles.full_name}</TableCell>
+                              <TableCell>{expense.profiles?.full_name || 'Unknown'}</TableCell>
                               <TableCell className="text-right">{formatCurrency(expense.amount + expense.gst_amount)}</TableCell>
                             </TableRow>
                           ))
@@ -1140,7 +1140,7 @@ export default function Approvals() {
                             <TableRow key={income.id}>
                               <TableCell>{new Date(income.created_at).toLocaleDateString()}</TableCell>
                               <TableCell>{income.income_categories?.category_name}</TableCell>
-                              <TableCell>{income.profiles.full_name}</TableCell>
+                              <TableCell>{income.profiles?.full_name || 'Unknown'}</TableCell>
                               <TableCell className="text-right">{formatCurrency(income.actual_amount + income.gst_amount)}</TableCell>
                             </TableRow>
                           ))
@@ -1323,7 +1323,7 @@ export default function Approvals() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Recorded By</Label>
-                  <div className="font-medium">{selectedIncome.profiles.full_name}</div>
+                  <div className="font-medium">{selectedIncome.profiles?.full_name || 'Unknown'}</div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Date</Label>
