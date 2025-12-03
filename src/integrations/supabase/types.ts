@@ -133,6 +133,48 @@ export type Database = {
         }
         Relationships: []
       }
+      cam_tracking: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          paid_flats: number
+          pending_flats: number
+          quarter: number
+          total_flats: number
+          tower: string
+          updated_at: string
+          uploaded_by: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_flats?: number
+          pending_flats?: number
+          quarter: number
+          total_flats?: number
+          tower: string
+          updated_at?: string
+          uploaded_by: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_flats?: number
+          pending_flats?: number
+          quarter?: number
+          total_flats?: number
+          tower?: string
+          updated_at?: string
+          uploaded_by?: string
+          year?: number
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount: number
