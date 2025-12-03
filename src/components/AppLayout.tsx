@@ -15,6 +15,7 @@ import {
   FileBarChart,
   Plus,
   Edit3,
+  Building2,
 } from 'lucide-react';
 import {
   Sheet,
@@ -36,6 +37,7 @@ const navigation = [
   { name: 'User Management', href: '/user-management', icon: UserCog, roles: ['treasurer'] },
   { name: 'Reports', href: '/reports', icon: FileBarChart, roles: ['treasurer', 'accountant', 'lead'] },
   { name: 'Petty Cash', href: '/petty-cash', icon: Receipt, roles: ['treasurer', 'lead', 'accountant'] },
+  { name: 'CAM Tracking', href: '/cam-tracking', icon: Building2, roles: ['treasurer', 'lead'] },
   { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
 ];
 

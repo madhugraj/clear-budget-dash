@@ -18,6 +18,7 @@ import Historical from "./pages/Historical";
 import UserManagement from "./pages/UserManagement";
 import Reports from "./pages/Reports";
 import PettyCash from "./pages/PettyCash";
+import CAMTracking from "./pages/CAMTracking";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -143,6 +144,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <PettyCash />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cam-tracking"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CAMTracking />
                   </AppLayout>
                 </ProtectedRoute>
               }
