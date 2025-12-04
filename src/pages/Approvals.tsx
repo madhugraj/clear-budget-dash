@@ -123,10 +123,6 @@ export default function Approvals() {
   const [pendingCAM, setPendingCAM] = useState<CAMRecord[]>([]);
   const [correctionRequests, setCorrectionRequests] = useState<Expense[]>([]);
 
-  // Historical Data State
-  const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
-  const [historicalIncome, setHistoricalIncome] = useState<Income[]>([]);
-  const [historicalPettyCash, setHistoricalPettyCash] = useState<PettyCash[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -153,11 +149,6 @@ export default function Approvals() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'historical') {
-      loadHistoricalData();
-    }
-  }, [activeTab]);
 
   const loadApprovals = async () => {
     try {
@@ -276,69 +267,6 @@ export default function Approvals() {
     }
   };
 
-  const loadHistoricalData = async () => {
-    try {
-      // Fetch historical expenses (approved or paid)
-      const { data: expenses, error: expError } = await supabase
-        .from('expenses')
-        .select(`
-          *,
-          budget_master!expenses_budget_master_id_fkey (item_name, category, committee, annual_budget),
-          profiles!expenses_claimed_by_fkey (full_name, email)
-        `)
-        .in('status', ['approved', 'paid'])
-        .order('expense_date', { ascending: false })
-        .limit(50);
-
-      if (expError) throw expError;
-
-      // Fetch historical income (approved)
-      const { data: income, error: incError } = await supabase
-        .from('income_actuals')
-        .select(`
-          *,
-          income_categories!income_actuals_category_id_fkey (category_name, subcategory_name)
-        `)
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (incError) throw incError;
-
-      // Map profiles for income
-      const incomeWithProfiles = await Promise.all(
-        (income || []).map(async (inc) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', inc.recorded_by)
-            .single();
-          return { ...inc, profiles: profile || { full_name: 'Unknown', email: '' } };
-        })
-      );
-
-      setHistoricalExpenses(expenses || []);
-      setHistoricalIncome(incomeWithProfiles as Income[] || []);
-
-      // Fetch historical petty cash (approved)
-      const { data: pettyCash, error: pcError } = await supabase
-        .from('petty_cash')
-        .select('*, profiles!petty_cash_submitted_by_fkey (full_name, email)')
-        .eq('status', 'approved')
-        .order('date', { ascending: false })
-        .limit(50);
-
-      if (pcError) throw pcError;
-      setHistoricalPettyCash(pettyCash as unknown as PettyCash[] || []);
-
-    } catch (error: any) {
-      toast({
-        title: 'Error loading history',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
 
   const handleApprove = async (expenseId: string) => {
     setProcessing(true);
@@ -835,7 +763,7 @@ export default function Approvals() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-3xl grid-cols-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-5">
           <TabsTrigger value="expenses">
             Expenses ({pendingExpenses.length})
           </TabsTrigger>
@@ -845,14 +773,11 @@ export default function Approvals() {
           <TabsTrigger value="cam">
             CAM ({pendingCAM.length})
           </TabsTrigger>
-          <TabsTrigger value="corrections">
-            Corrections ({correctionRequests.length})
-          </TabsTrigger>
           <TabsTrigger value="petty-cash">
             Petty Cash ({pendingPettyCash.length})
           </TabsTrigger>
-          <TabsTrigger value="historical">
-            Historical Data
+          <TabsTrigger value="corrections">
+            Corrections ({correctionRequests.length})
           </TabsTrigger>
         </TabsList>
 
@@ -1250,127 +1175,6 @@ export default function Approvals() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="historical" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historical Data</CardTitle>
-              <CardDescription>View past approved income and expenses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <FileText className="h-5 w-5" /> Expense History
-                  </h3>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Claimed By</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {historicalExpenses.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                              No historical expenses found
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          historicalExpenses.map((expense) => (
-                            <TableRow key={expense.id}>
-                              <TableCell>{new Date(expense.expense_date).toLocaleDateString()}</TableCell>
-                              <TableCell>{expense.description}</TableCell>
-                              <TableCell>{expense.budget_master?.category}</TableCell>
-                              <TableCell>{expense.profiles?.full_name || 'Unknown'}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(expense.amount + expense.gst_amount)}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <History className="h-5 w-5" /> Income History
-                  </h3>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Recorded By</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {historicalIncome.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
-                              No historical income found
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          historicalIncome.map((income) => (
-                            <TableRow key={income.id}>
-                              <TableCell>{new Date(income.created_at).toLocaleDateString()}</TableCell>
-                              <TableCell>{income.income_categories?.category_name}</TableCell>
-                              <TableCell>{income.profiles?.full_name || 'Unknown'}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(income.actual_amount + income.gst_amount)}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <FileText className="h-5 w-5" /> Petty Cash History
-                  </h3>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead>Submitted By</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {historicalPettyCash.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
-                              No historical petty cash found
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          historicalPettyCash.map((item) => (
-                            <TableRow key={item.id}>
-                              <TableCell>{new Date(item.date).toLocaleDateString()}</TableCell>
-                              <TableCell>{item.item_name}</TableCell>
-                              <TableCell>{item.profiles?.full_name}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Expense Details Dialog */}
