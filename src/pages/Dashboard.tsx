@@ -518,8 +518,16 @@ export default function Dashboard() {
       // Convert to chart data format
       const categoryIncomeChartData = parentCategories.map(parent => {
         const data = parentCategoryData[parent.id];
+        // Special display name for "Others" category
+        let displayName = parent.category_name;
+        if (parent.category_name === 'Others') {
+          displayName = 'Miscellaneous Income (Move In/Move Out)';
+        }
+        // Truncate long names
+        displayName = displayName.length > 45 ? displayName.substring(0, 45) + '...' : displayName;
+
         return {
-          category: parent.category_name.length > 25 ? parent.category_name.substring(0, 25) + '...' : parent.category_name,
+          category: displayName,
           actual: data.actual,
           budget: data.budget,
           utilization: data.budget > 0 ? data.actual / data.budget * 100 : 0
