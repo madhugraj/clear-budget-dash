@@ -436,20 +436,29 @@ export default function CAMTracking() {
           let monthNum = -1;
 
           if (typeof rowMonthStr === 'string') {
-            // Simple parsing logic
-            const m = rowMonthStr.slice(0, 3);
-            monthNum = parseInt(Object.keys(MONTH_NAMES).find(key => MONTH_NAMES[parseInt(key)] === m) || '-1');
+            // Get first 3 characters (e.g., "Apr" from "April" or just "Apr")
+            const monthAbbr = rowMonthStr.trim().slice(0, 3);
+
+            // Find the month number where MONTH_NAMES matches
+            for (const [key, value] of Object.entries(MONTH_NAMES)) {
+              if (value === monthAbbr) {
+                monthNum = parseInt(key);
+                break;
+              }
+            }
           } else if (typeof rowMonthStr === 'number') {
             monthNum = rowMonthStr;
           }
 
+          console.log('Processing row:', row, 'Month String:', rowMonthStr, 'Parsed Month Num:', monthNum);
+
           if (monthNum !== -1 && months.includes(monthNum)) {
             updatedTowerData[monthNum] = {
               ...updatedTowerData[monthNum],
-              paid_flats: parseInt(row.Paid || row.paid || 0),
-              pending_flats: parseInt(row.Pending || row.pending || 0),
-              dues_cleared_from_previous: parseInt(row['Dues Cleared'] || row.dues_cleared || 0),
-              advance_payments: parseInt(row['Advance'] || row.advance || 0),
+              paid_flats: parseInt(row.Paid || row.paid || row.paid_flats || 0),
+              pending_flats: parseInt(row.Pending || row.pending || row.pending_flats || 0),
+              dues_cleared_from_previous: parseInt(row['Dues Cleared'] || row.dues_cleared || row.dues_cleared_from_previous || 0),
+              advance_payments: parseInt(row['Advance'] || row.advance || row.advance_payments || 0),
             };
             hasUpdates = true;
           }
