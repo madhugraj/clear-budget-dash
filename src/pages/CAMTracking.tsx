@@ -90,6 +90,7 @@ export default function CAMTracking() {
   const [selectedTower, setSelectedTower] = useState<string>('1A');
   // Map: Tower -> Month -> Data
   const [camData, setCamData] = useState<Record<string, Record<number, CAMData>>>({});
+  const [supportingDocs, setSupportingDocs] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -409,74 +410,37 @@ export default function CAMTracking() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!user) {
+      toast.error('You must be logged in to upload files');
+      return;
+    }
+
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      // Upload file to Supabase storage as supporting document
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${tower}_${Date.now()}.${fileExt}`;
+      const filePath = `cam-documents/${fileName}`;
 
-        // Expecting rows to have Month column or we assume order?
-        // Let's assume the user uploads a file with columns like: Month, Paid, Pending...
-        // Or one row per month.
+      const { error: uploadError } = await supabase.storage
+        .from('invoices')
+        .upload(filePath, file);
 
-        // For simplicity, let's assume the file has 3 rows, one for each month of the quarter.
-        // Or we look for a 'Month' column.
+      if (uploadError) throw uploadError;
 
-        const { months } = getCalendarYearAndMonths();
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('invoices')
+        .getPublicUrl(filePath);
 
-        const updatedTowerData = { ...camData[tower] };
-        let hasUpdates = false;
+      // Store the file URL for this tower (you can save this with the CAM data later)
+      setSupportingDocs(prev => ({
+        ...prev,
+        [tower]: publicUrl
+      }));
 
-        jsonData.forEach(row => {
-          // Try to match month
-          const rowMonthStr = row.Month || row.month;
-          let monthNum = -1;
-
-          if (typeof rowMonthStr === 'string') {
-            // Get first 3 characters (e.g., "Apr" from "April" or just "Apr")
-            const monthAbbr = rowMonthStr.trim().slice(0, 3);
-
-            // Find the month number where MONTH_NAMES matches
-            for (const [key, value] of Object.entries(MONTH_NAMES)) {
-              if (value === monthAbbr) {
-                monthNum = parseInt(key);
-                break;
-              }
-            }
-          } else if (typeof rowMonthStr === 'number') {
-            monthNum = rowMonthStr;
-          }
-
-          console.log('Processing row:', row, 'Month String:', rowMonthStr, 'Parsed Month Num:', monthNum);
-
-          if (monthNum !== -1 && months.includes(monthNum)) {
-            updatedTowerData[monthNum] = {
-              ...updatedTowerData[monthNum],
-              paid_flats: parseInt(row.Paid || row.paid || row.paid_flats || 0),
-              pending_flats: parseInt(row.Pending || row.pending || row.pending_flats || 0),
-              dues_cleared_from_previous: parseInt(row['Dues Cleared'] || row.dues_cleared || row.dues_cleared_from_previous || 0),
-              advance_payments: parseInt(row['Advance'] || row.advance || row.advance_payments || 0),
-            };
-            hasUpdates = true;
-          }
-        });
-
-        if (hasUpdates) {
-          setCamData(prev => ({
-            ...prev,
-            [tower]: updatedTowerData
-          }));
-          toast.success(`Data loaded for Tower ${tower}. Review and save.`);
-        } else {
-          toast.warning('No matching month data found in file. Ensure "Month" column exists (e.g. "Apr", "May").');
-        }
-      };
-      reader.readAsBinaryString(file);
+      toast.success(`Supporting document uploaded for Tower ${tower}`);
     } catch (error: any) {
-      toast.error('Failed to parse file: ' + error.message);
+      toast.error('Failed to upload file: ' + error.message);
     }
     event.target.value = '';
   };
