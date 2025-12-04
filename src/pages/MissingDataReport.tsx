@@ -44,7 +44,7 @@ export default function MissingDataReport() {
             const currentYear = new Date().getFullYear();
             const fiscalYear = 'FY25-26';
 
-            // Check Income Categories
+            // Check Income Categories - only approved entries count
             const { data: incomeCategories } = await supabase
                 .from('income_categories')
                 .select('id, category_name, subcategory_name')
@@ -52,10 +52,11 @@ export default function MissingDataReport() {
 
             const { data: incomeActuals } = await supabase
                 .from('income_actuals')
-                .select('category_id, month, fiscal_year')
-                .eq('fiscal_year', fiscalYear);
+                .select('category_id, month, fiscal_year, status')
+                .eq('fiscal_year', fiscalYear)
+                .eq('status', 'approved'); // Only count approved entries
 
-            // Build a map of what exists
+            // Build a map of what exists (approved only)
             const incomeMap = new Map<string, Set<number>>();
             incomeActuals?.forEach(actual => {
                 if (!incomeMap.has(actual.category_id)) {
@@ -80,12 +81,13 @@ export default function MissingDataReport() {
                 });
             });
 
-            // Check Petty Cash (should have entries for each month)
+            // Check Petty Cash - only approved entries count
             const { data: pettyCashData } = await supabase
                 .from('petty_cash')
-                .select('date')
+                .select('date, status')
                 .gte('date', `${currentYear}-04-01`)
-                .lte('date', `${currentYear + 1}-03-31`);
+                .lte('date', `${currentYear + 1}-03-31`)
+                .eq('status', 'approved'); // Only count approved entries
 
             const pettyCashMonths = new Set<number>();
             pettyCashData?.forEach(entry => {
@@ -104,7 +106,7 @@ export default function MissingDataReport() {
                 }
             });
 
-            // Check CAM Tracking (all towers for each month)
+            // Check CAM Tracking - only approved/submitted entries count
             const TOWERS = [
                 '1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5', '6', '7', '8',
                 '9A', '9B', '9C', '10', '11', '12', '13', '14', '15A', '15B',
@@ -113,8 +115,9 @@ export default function MissingDataReport() {
 
             const { data: camData } = await supabase
                 .from('cam_tracking')
-                .select('tower, month, year')
-                .eq('year', currentYear);
+                .select('tower, month, year, status')
+                .eq('year', currentYear)
+                .in('status', ['submitted', 'approved']); // Only count submitted or approved
 
             const camMap = new Map<string, Set<number>>();
             camData?.forEach(entry => {
