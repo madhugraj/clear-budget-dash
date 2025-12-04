@@ -384,14 +384,22 @@ export default function Dashboard() {
       } = await supabase.from('income_budget').select('category_id, budgeted_amount').eq('fiscal_year', 'FY25-26');
       if (budgetError) throw budgetError;
 
-      // Get actual income data (approved only)
+      // Get actual income data - first check what data exists
       const {
-        data: actualData,
-        error: actualError
-      } = await supabase.from('income_actuals').select('category_id, actual_amount, gst_amount, month').eq('fiscal_year', 'FY25-26').eq('status', 'approved');
-      if (actualError) throw actualError;
+        data: allActualData,
+        error: allActualError
+      } = await supabase.from('income_actuals').select('category_id, actual_amount, gst_amount, month, fiscal_year, status');
 
-      console.log('Income Data loaded:', actualData);
+      if (allActualError) throw allActualError;
+
+      console.log('ALL Income Data (before filtering):', allActualData);
+      console.log('Fiscal years found:', [...new Set(allActualData?.map(d => d.fiscal_year))]);
+      console.log('Statuses found:', [...new Set(allActualData?.map(d => d.status))]);
+
+      // Get actual income data (approved only for FY25-26)
+      const actualData = allActualData?.filter(d => d.status === 'approved') || [];
+
+      console.log('Approved Income Data:', actualData);
 
       // Process monthly income data by the month field (which month the income is FOR)
       const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
