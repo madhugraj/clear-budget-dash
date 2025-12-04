@@ -87,6 +87,26 @@ interface PettyCash {
   };
 }
 
+interface CAMRecord {
+  id: string;
+  tower: string;
+  year: number;
+  quarter: number;
+  month: number | null;
+  paid_flats: number;
+  pending_flats: number;
+  total_flats: number;
+  dues_cleared_from_previous: number;
+  advance_payments: number;
+  status: string;
+  submitted_at: string | null;
+  uploaded_by: string;
+  profiles: {
+    full_name: string;
+    email: string;
+  };
+}
+
 export default function Approvals() {
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -100,6 +120,7 @@ export default function Approvals() {
   const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([]);
   const [pendingIncome, setPendingIncome] = useState<Income[]>([]);
   const [pendingPettyCash, setPendingPettyCash] = useState<PettyCash[]>([]);
+  const [pendingCAM, setPendingCAM] = useState<CAMRecord[]>([]);
   const [correctionRequests, setCorrectionRequests] = useState<Expense[]>([]);
 
   // Historical Data State
@@ -115,6 +136,7 @@ export default function Approvals() {
   const [selectedCorrectionIds, setSelectedCorrectionIds] = useState<Set<string>>(new Set());
   const [selectedIncomeIds, setSelectedIncomeIds] = useState<Set<string>>(new Set());
   const [selectedPettyCashIds, setSelectedPettyCashIds] = useState<Set<string>>(new Set());
+  const [selectedCAMIds, setSelectedCAMIds] = useState<Set<string>>(new Set());
   const [correctionReason, setCorrectionReason] = useState('');
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
@@ -215,9 +237,31 @@ export default function Approvals() {
 
       if (correctionsError) throw correctionsError;
 
+      // Fetch pending CAM data
+      const { data: pendingCAMData, error: camError } = await supabase
+        .from('cam_tracking')
+        .select('*')
+        .eq('status', 'submitted')
+        .order('submitted_at', { ascending: false });
+
+      if (camError) throw camError;
+
+      // Fetch profiles for CAM data
+      const camWithProfiles = await Promise.all(
+        (pendingCAMData || []).map(async (cam: any) => {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', cam.uploaded_by)
+            .maybeSingle();
+          return { ...cam, profiles: profile || { full_name: 'Unknown', email: '' } };
+        })
+      );
+
       setPendingExpenses(pending || []);
       setPendingIncome(incomeWithProfiles as Income[] || []);
       setPendingPettyCash(pendingPettyCashData as unknown as PettyCash[] || []);
+      setPendingCAM(camWithProfiles as CAMRecord[] || []);
       setCorrectionRequests(corrections || []);
 
     } catch (error: any) {

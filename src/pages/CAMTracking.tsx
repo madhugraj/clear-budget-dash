@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, Save, Upload, Building2, AlertCircle, Download } from 'lucide-react';
+import { Loader2, Save, Upload, Building2, AlertCircle, Download, Send } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
@@ -58,6 +59,7 @@ interface CAMData {
   advance_payments: number;
   notes?: string;
   is_locked?: boolean;
+  status?: string;
 }
 
 interface CAMDataFromDB {
@@ -73,6 +75,7 @@ interface CAMDataFromDB {
   advance_payments: number;
   notes: string | null;
   is_locked: boolean;
+  status: string;
   uploaded_by: string;
   created_at: string;
   updated_at: string;
@@ -156,7 +159,8 @@ export default function CAMTracking() {
             dues_cleared_from_previous: existing.dues_cleared_from_previous,
             advance_payments: existing.advance_payments,
             notes: existing.notes || undefined,
-            is_locked: existing.is_locked
+            is_locked: existing.is_locked,
+            status: existing.status
           } : {
             tower,
             year: calendarYear,
@@ -167,7 +171,8 @@ export default function CAMTracking() {
             total_flats: TOWER_TOTAL_FLATS[tower],
             dues_cleared_from_previous: 0,
             advance_payments: 0,
-            is_locked: false
+            is_locked: false,
+            status: 'draft'
           };
         });
       });
@@ -280,13 +285,81 @@ export default function CAMTracking() {
 
       if (error) throw error;
 
-      toast.success(`Tower ${tower} data saved successfully`);
+      toast.success(`Tower ${tower} data saved as draft`);
       fetchCAMData();
     } catch (error: any) {
       toast.error('Failed to save: ' + error.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmitTower = async (tower: string) => {
+    if (!user) return;
+
+    const { months } = getCalendarYearAndMonths();
+    const towerMonthsData = camData[tower];
+
+    // Validate all months first
+    for (const month of months) {
+      const error = validateTowerData(tower, month, towerMonthsData[month]);
+      if (error) {
+        toast.error(`Error in ${MONTH_NAMES[month]}: ${error}`);
+        return;
+      }
+    }
+
+    // Check if all months have data (paid_flats > 0 or pending_flats > 0)
+    const hasData = months.every(month => {
+      const data = towerMonthsData[month];
+      return data.paid_flats > 0 || data.pending_flats > 0;
+    });
+
+    if (!hasData) {
+      toast.error('Please enter data for all months before submitting');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { calendarYear } = getCalendarYearAndMonths();
+      
+      // Update status to 'submitted' for all months of this tower
+      const { error } = await supabase
+        .from('cam_tracking')
+        .update({ 
+          status: 'submitted',
+          submitted_at: new Date().toISOString()
+        } as any)
+        .eq('tower', tower)
+        .eq('year', calendarYear)
+        .in('month', months);
+
+      if (error) throw error;
+
+      toast.success(`Tower ${tower} data submitted for approval`);
+      fetchCAMData();
+    } catch (error: any) {
+      toast.error('Failed to submit: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getTowerStatus = (tower: string): string => {
+    const { months } = getCalendarYearAndMonths();
+    const statuses = months.map(m => camData[tower]?.[m]?.status || 'draft');
+    
+    if (statuses.every(s => s === 'approved')) return 'approved';
+    if (statuses.some(s => s === 'submitted')) return 'submitted';
+    if (statuses.some(s => s === 'correction_pending')) return 'correction_pending';
+    if (statuses.some(s => s === 'correction_approved')) return 'correction_approved';
+    return 'draft';
+  };
+
+  const canEditTower = (tower: string): boolean => {
+    const status = getTowerStatus(tower);
+    return status === 'draft' || status === 'correction_approved';
   };
 
   const handleDownload = () => {
@@ -528,26 +601,52 @@ export default function CAMTracking() {
 
 
 
-              <div className="flex items-center gap-3 pt-4 border-t">
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={(e) => handleFileUpload(e, selectedTower)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <Button variant="outline" size="sm">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload for Tower {selectedTower}
+              <div className="flex items-center justify-between gap-3 pt-4 border-t">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={(e) => handleFileUpload(e, selectedTower)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={!canEditTower(selectedTower)}
+                    />
+                    <Button variant="outline" size="sm" disabled={!canEditTower(selectedTower)}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload
+                    </Button>
+                  </div>
+                  <Button
+                    onClick={() => handleSaveTower(selectedTower)}
+                    disabled={saving || !!validationErrors[selectedTower] || !canEditTower(selectedTower)}
+                    variant="outline"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Draft
                   </Button>
+                  {userRole === 'lead' && getTowerStatus(selectedTower) === 'draft' && (
+                    <Button
+                      onClick={() => handleSubmitTower(selectedTower)}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                      Submit for Approval
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  onClick={() => handleSaveTower(selectedTower)}
-                  disabled={saving || !!validationErrors[selectedTower]}
-                >
-                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  Save Tower {selectedTower}
-                </Button>
+                <Badge variant={
+                  getTowerStatus(selectedTower) === 'approved' ? 'default' :
+                  getTowerStatus(selectedTower) === 'submitted' ? 'secondary' :
+                  getTowerStatus(selectedTower) === 'correction_pending' ? 'destructive' :
+                  'outline'
+                }>
+                  {getTowerStatus(selectedTower) === 'draft' ? 'Draft' :
+                   getTowerStatus(selectedTower) === 'submitted' ? 'Pending Approval' :
+                   getTowerStatus(selectedTower) === 'approved' ? 'Approved' :
+                   getTowerStatus(selectedTower) === 'correction_pending' ? 'Correction Pending' :
+                   getTowerStatus(selectedTower) === 'correction_approved' ? 'Edit Allowed' :
+                   'Draft'}
+                </Badge>
               </div>
             </CardContent>
           </Card>

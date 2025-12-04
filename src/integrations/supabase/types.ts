@@ -136,6 +136,11 @@ export type Database = {
       cam_tracking: {
         Row: {
           advance_payments: number
+          approved_at: string | null
+          approved_by: string | null
+          correction_approved_at: string | null
+          correction_reason: string | null
+          correction_requested_at: string | null
           created_at: string
           dues_cleared_from_previous: number
           id: string
@@ -145,6 +150,8 @@ export type Database = {
           paid_flats: number
           pending_flats: number
           quarter: number
+          status: string
+          submitted_at: string | null
           total_flats: number
           tower: string
           updated_at: string
@@ -153,6 +160,11 @@ export type Database = {
         }
         Insert: {
           advance_payments?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          correction_approved_at?: string | null
+          correction_reason?: string | null
+          correction_requested_at?: string | null
           created_at?: string
           dues_cleared_from_previous?: number
           id?: string
@@ -162,6 +174,8 @@ export type Database = {
           paid_flats?: number
           pending_flats?: number
           quarter: number
+          status?: string
+          submitted_at?: string | null
           total_flats?: number
           tower: string
           updated_at?: string
@@ -170,6 +184,11 @@ export type Database = {
         }
         Update: {
           advance_payments?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          correction_approved_at?: string | null
+          correction_reason?: string | null
+          correction_requested_at?: string | null
           created_at?: string
           dues_cleared_from_previous?: number
           id?: string
@@ -179,6 +198,8 @@ export type Database = {
           paid_flats?: number
           pending_flats?: number
           quarter?: number
+          status?: string
+          submitted_at?: string | null
           total_flats?: number
           tower?: string
           updated_at?: string

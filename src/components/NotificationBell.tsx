@@ -17,6 +17,7 @@ interface NotificationCounts {
   pendingIncome: number;
   correctionRequests: number;
   pendingPettyCash: number;
+  pendingCAM: number;
 }
 
 export function NotificationBell() {
@@ -27,10 +28,11 @@ export function NotificationBell() {
     pendingIncome: 0,
     correctionRequests: 0,
     pendingPettyCash: 0,
+    pendingCAM: 0,
   });
   const [isOpen, setIsOpen] = useState(false);
 
-  const totalCount = counts.pendingExpenses + counts.pendingIncome + counts.correctionRequests + counts.pendingPettyCash;
+  const totalCount = counts.pendingExpenses + counts.pendingIncome + counts.correctionRequests + counts.pendingPettyCash + counts.pendingCAM;
 
   useEffect(() => {
     if (userRole === 'treasurer') {
@@ -63,18 +65,23 @@ export function NotificationBell() {
         .eq('status', 'correction_pending');
 
       // Fetch pending petty cash count
-      const { count: pettyCashCount, error: pettyCashError } = await supabase
+      const { count: pettyCashCount } = await supabase
         .from('petty_cash')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
-      
-      console.log('Petty cash notification count:', pettyCashCount, 'Error:', pettyCashError);
+
+      // Fetch pending CAM count
+      const { count: camCount } = await supabase
+        .from('cam_tracking')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'submitted');
 
       setCounts({
         pendingExpenses: expenseCount || 0,
         pendingIncome: incomeCount || 0,
         correctionRequests: correctionCount || 0,
         pendingPettyCash: pettyCashCount || 0,
+        pendingCAM: camCount || 0,
       });
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -168,6 +175,21 @@ export function NotificationBell() {
                     </div>
                   </div>
                   <Badge variant="secondary">{counts.pendingPettyCash}</Badge>
+                </button>
+              )}
+
+              {counts.pendingCAM > 0 && (
+                <button
+                  onClick={() => handleNavigate('cam')}
+                  className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                >
+                  <div>
+                    <div className="font-medium">Pending CAM</div>
+                    <div className="text-sm text-muted-foreground">
+                      {counts.pendingCAM} CAM record{counts.pendingCAM !== 1 ? 's' : ''} awaiting approval
+                    </div>
+                  </div>
+                  <Badge variant="secondary">{counts.pendingCAM}</Badge>
                 </button>
               )}
               
