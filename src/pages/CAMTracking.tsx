@@ -57,6 +57,25 @@ interface CAMData {
   dues_cleared_from_previous: number;
   advance_payments: number;
   notes?: string;
+  is_locked?: boolean;
+}
+
+interface CAMDataFromDB {
+  id: string;
+  tower: string;
+  year: number;
+  quarter: number;
+  month: number | null;
+  paid_flats: number;
+  pending_flats: number;
+  total_flats: number;
+  dues_cleared_from_previous: number;
+  advance_payments: number;
+  notes: string | null;
+  is_locked: boolean;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function CAMTracking() {
@@ -107,17 +126,16 @@ export default function CAMTracking() {
     try {
       const { calendarYear, months } = getCalendarYearAndMonths();
 
-      // We need to fetch data for the specific months
-      // Since we might have mixed years (e.g. if we selected Q4, we want Jan-Mar of next year)
-      // But wait, if I select FY2024 Q4, I want Jan-Mar 2025.
-
+      // Fetch data for the specific months in the calendar year
       const { data, error } = await supabase
         .from('cam_tracking')
         .select('*')
-        .in('month', months)
         .eq('year', calendarYear);
 
       if (error) throw error;
+
+      // Cast data to our expected type (types.ts may not have month/is_locked yet)
+      const typedData = (data || []) as unknown as CAMDataFromDB[];
 
       const dataMap: Record<string, Record<number, CAMData>> = {};
 
@@ -125,17 +143,31 @@ export default function CAMTracking() {
       TOWERS.forEach(tower => {
         dataMap[tower] = {};
         months.forEach(month => {
-          const existing = data?.find(d => d.tower === tower && d.month === month);
-          dataMap[tower][month] = existing || {
+          const existing = typedData.find(d => d.tower === tower && d.month === month);
+          dataMap[tower][month] = existing ? {
+            id: existing.id,
+            tower: existing.tower,
+            year: existing.year,
+            quarter: existing.quarter,
+            month: existing.month || month,
+            paid_flats: existing.paid_flats,
+            pending_flats: existing.pending_flats,
+            total_flats: existing.total_flats,
+            dues_cleared_from_previous: existing.dues_cleared_from_previous,
+            advance_payments: existing.advance_payments,
+            notes: existing.notes || undefined,
+            is_locked: existing.is_locked
+          } : {
             tower,
             year: calendarYear,
-            quarter: Math.ceil(month / 3), // Calendar Quarter (1-4)
+            quarter: Math.ceil(month / 3),
             month,
             paid_flats: 0,
             pending_flats: 0,
             total_flats: TOWER_TOTAL_FLATS[tower],
             dues_cleared_from_previous: 0,
-            advance_payments: 0
+            advance_payments: 0,
+            is_locked: false
           };
         });
       });
@@ -241,9 +273,10 @@ export default function CAMTracking() {
       // but upsert handles that if we match the unique key? 
       // Supabase upsert matches on Primary Key by default, or we can specify `onConflict`.
 
+      // Cast to any to bypass type checking until types.ts is regenerated
       const { error } = await supabase
         .from('cam_tracking')
-        .upsert(upsertData, { onConflict: 'tower, year, month' });
+        .upsert(upsertData as any, { onConflict: 'tower,year,month' });
 
       if (error) throw error;
 

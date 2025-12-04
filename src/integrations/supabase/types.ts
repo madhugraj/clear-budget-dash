@@ -139,6 +139,8 @@ export type Database = {
           created_at: string
           dues_cleared_from_previous: number
           id: string
+          is_locked: boolean
+          month: number | null
           notes: string | null
           paid_flats: number
           pending_flats: number
@@ -154,6 +156,8 @@ export type Database = {
           created_at?: string
           dues_cleared_from_previous?: number
           id?: string
+          is_locked?: boolean
+          month?: number | null
           notes?: string | null
           paid_flats?: number
           pending_flats?: number
@@ -169,6 +173,8 @@ export type Database = {
           created_at?: string
           dues_cleared_from_previous?: number
           id?: string
+          is_locked?: boolean
+          month?: number | null
           notes?: string | null
           paid_flats?: number
           pending_flats?: number
