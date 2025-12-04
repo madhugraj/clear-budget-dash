@@ -323,19 +323,35 @@ export default function CAMTracking() {
     setSaving(true);
     try {
       const { calendarYear } = getCalendarYearAndMonths();
-      
+
       // Update status to 'submitted' for all months of this tower
       const { error } = await supabase
         .from('cam_tracking')
-        .update({ 
+        .update({
           status: 'submitted',
           submitted_at: new Date().toISOString()
         } as any)
         .eq('tower', tower)
-        .eq('year', calendarYear)
-        .in('month', months);
-
       if (error) throw error;
+
+      // Send notification to treasurers (asynchronously, don't block on it)
+      // Get the IDs of records that were just submitted
+      const { data: submittedRecords } = await supabase
+        .from('cam_tracking')
+        .select('id')
+        .eq('tower', tower)
+        .eq('year', calendarYear)
+        .in('month', months)
+        .eq('status', 'submitted');
+
+      // Send notifications for each record
+      if (submittedRecords && submittedRecords.length > 0) {
+        for (const record of submittedRecords) {
+          supabase.functions.invoke('send-cam-notification', {
+            body: { camId: record.id, action: 'submitted' }
+          }).catch(err => console.error('Notification failed:', err));
+        }
+      }
 
       toast.success(`Tower ${tower} data submitted for approval`);
       fetchCAMData();
@@ -349,7 +365,7 @@ export default function CAMTracking() {
   const getTowerStatus = (tower: string): string => {
     const { months } = getCalendarYearAndMonths();
     const statuses = months.map(m => camData[tower]?.[m]?.status || 'draft');
-    
+
     if (statuses.every(s => s === 'approved')) return 'approved';
     if (statuses.some(s => s === 'submitted')) return 'submitted';
     if (statuses.some(s => s === 'correction_pending')) return 'correction_pending';
@@ -636,16 +652,16 @@ export default function CAMTracking() {
                 </div>
                 <Badge variant={
                   getTowerStatus(selectedTower) === 'approved' ? 'default' :
-                  getTowerStatus(selectedTower) === 'submitted' ? 'secondary' :
-                  getTowerStatus(selectedTower) === 'correction_pending' ? 'destructive' :
-                  'outline'
+                    getTowerStatus(selectedTower) === 'submitted' ? 'secondary' :
+                      getTowerStatus(selectedTower) === 'correction_pending' ? 'destructive' :
+                        'outline'
                 }>
                   {getTowerStatus(selectedTower) === 'draft' ? 'Draft' :
-                   getTowerStatus(selectedTower) === 'submitted' ? 'Pending Approval' :
-                   getTowerStatus(selectedTower) === 'approved' ? 'Approved' :
-                   getTowerStatus(selectedTower) === 'correction_pending' ? 'Correction Pending' :
-                   getTowerStatus(selectedTower) === 'correction_approved' ? 'Edit Allowed' :
-                   'Draft'}
+                    getTowerStatus(selectedTower) === 'submitted' ? 'Pending Approval' :
+                      getTowerStatus(selectedTower) === 'approved' ? 'Approved' :
+                        getTowerStatus(selectedTower) === 'correction_pending' ? 'Correction Pending' :
+                          getTowerStatus(selectedTower) === 'correction_approved' ? 'Edit Allowed' :
+                            'Draft'}
                 </Badge>
               </div>
             </CardContent>

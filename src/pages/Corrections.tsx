@@ -116,6 +116,7 @@ export default function Corrections() {
   const [historicalExpenses, setHistoricalExpenses] = useState<Expense[]>([]);
   const [historicalIncome, setHistoricalIncome] = useState<Income[]>([]);
   const [historicalPettyCash, setHistoricalPettyCash] = useState<PettyCash[]>([]);
+  const [historicalCAM, setHistoricalCAM] = useState<any[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [selectedHistorical, setSelectedHistorical] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<string>('2025-04-01');
@@ -124,7 +125,7 @@ export default function Corrections() {
   const [showBulkDialog, setShowBulkDialog] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
-  const [historicalType, setHistoricalType] = useState<'expenses' | 'income' | 'petty_cash'>('expenses');
+  const [historicalType, setHistoricalType] = useState<'expenses' | 'income' | 'petty_cash' | 'cam'>('expenses');
 
   // Income Edit States
   const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
@@ -191,6 +192,8 @@ export default function Corrections() {
         loadHistoricalIncome();
       } else if (historicalType === 'petty_cash') {
         loadHistoricalPettyCash();
+      } else if (historicalType === 'cam') {
+        loadHistoricalCAM();
       }
     }
   }, [dateFrom, dateTo, userRole, historicalType]);
@@ -391,6 +394,31 @@ export default function Corrections() {
     } catch (error: any) {
       toast({
         title: 'Error loading historical petty cash',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setHistoricalLoading(false);
+    }
+  };
+
+  const loadHistoricalCAM = async () => {
+    if (userRole !== 'accountant' && userRole !== 'treasurer') return;
+
+    setHistoricalLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('cam_tracking')
+        .select('*')
+        .eq('status', 'approved')
+        .order('year', { ascending: false })
+        .order('month', { ascending: false });
+
+      if (error) throw error;
+      setHistoricalCAM(data || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading historical CAM',
         description: error.message,
         variant: 'destructive',
       });
@@ -747,11 +775,11 @@ export default function Corrections() {
 
     setDeleting(true);
     try {
-      const table = deleteConfirmation.type === 'expense' 
-        ? 'expenses' 
-        : deleteConfirmation.type === 'income' 
-        ? 'income_actuals'
-        : 'petty_cash';
+      const table = deleteConfirmation.type === 'expense'
+        ? 'expenses'
+        : deleteConfirmation.type === 'income'
+          ? 'income_actuals'
+          : 'petty_cash';
 
       const { error } = await supabase
         .from(table)
@@ -1076,6 +1104,7 @@ export default function Corrections() {
                         <SelectItem value="expenses">Expenses</SelectItem>
                         <SelectItem value="income">Income</SelectItem>
                         <SelectItem value="petty_cash">Petty Cash</SelectItem>
+                        <SelectItem value="cam">CAM</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1113,7 +1142,7 @@ export default function Corrections() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>
-                      Historical {historicalType === 'expenses' ? 'Expenses' : historicalType === 'income' ? 'Income' : 'Petty Cash'} ({historicalType === 'expenses' ? historicalExpenses.length : historicalType === 'income' ? historicalIncome.length : historicalPettyCash.length})
+                      Historical {historicalType === 'expenses' ? 'Expenses' : historicalType === 'income' ? 'Income' : historicalType === 'petty_cash' ? 'Petty Cash' : 'CAM'} ({historicalType === 'expenses' ? historicalExpenses.length : historicalType === 'income' ? historicalIncome.length : historicalType === 'petty_cash' ? historicalPettyCash.length : historicalCAM.length})
                     </CardTitle>
                     {historicalType === 'expenses' && userRole === 'accountant' && selectedHistorical.size > 0 && (
                       <div className="flex items-center gap-2">
@@ -1317,7 +1346,7 @@ export default function Corrections() {
                         </TableBody>
                       </Table>
                     )
-                  ) : (
+                  ) : historicalType === 'petty_cash' ? (
                     // Petty Cash Table
                     historicalPettyCash.length === 0 ? (
                       <div className="py-12 text-center">
@@ -1375,6 +1404,43 @@ export default function Corrections() {
                                   </Button>
                                 </TableCell>
                               )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )
+                  ) : (
+                    // CAM Table
+                    historicalCAM.length === 0 ? (
+                      <div className="py-12 text-center">
+                        <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">No historical CAM data found</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Tower</TableHead>
+                            <TableHead>Period</TableHead>
+                            <TableHead className="text-right">Paid Flats</TableHead>
+                            <TableHead className="text-right">Pending Flats</TableHead>
+                            <TableHead className="text-right">Total Flats</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {historicalCAM.map((cam) => (
+                            <TableRow key={cam.id}>
+                              <TableCell className="font-medium">{cam.tower}</TableCell>
+                              <TableCell>
+                                {cam.month ? `${MONTHS.find(m => m.value === cam.month)?.label} ${cam.year}` : `Q${cam.quarter} ${cam.year}`}
+                              </TableCell>
+                              <TableCell className="text-right">{cam.paid_flats}</TableCell>
+                              <TableCell className="text-right">{cam.pending_flats}</TableCell>
+                              <TableCell className="text-right">{cam.total_flats}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{cam.status}</Badge>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

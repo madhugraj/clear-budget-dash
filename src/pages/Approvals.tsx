@@ -746,6 +746,77 @@ export default function Approvals() {
     }).format(amount);
   };
 
+  const handleApproveCAM = async (camId: string) => {
+    setProcessing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('cam_tracking')
+        .update({
+          status: 'approved',
+          approved_by: user.id,
+          approved_at: new Date().toISOString(),
+          is_locked: true
+        })
+        .eq('id', camId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'CAM Approved',
+        description: 'The CAM record has been successfully approved.',
+      });
+
+      // Send notification
+      supabase.functions.invoke('send-cam-notification', { body: { camId, action: 'approved' } });
+
+      loadApprovals();
+    } catch (error: any) {
+      toast({
+        title: 'Error approving CAM',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRejectCAM = async (camId: string) => {
+    setProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('cam_tracking')
+        .update({
+          status: 'correction_pending',
+          is_locked: false
+        })
+        .eq('id', camId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'CAM Rejected',
+        description: 'The CAM record has been sent back for correction.',
+      });
+
+      // Send notification
+      // supabase.functions.invoke('send-cam-notification', { body: { camId, action: 'rejected' } });
+
+      loadApprovals();
+    } catch (error: any) {
+      toast({
+        title: 'Error rejecting CAM',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -771,6 +842,9 @@ export default function Approvals() {
           <TabsTrigger value="income">
             Income ({pendingIncome.length})
           </TabsTrigger>
+          <TabsTrigger value="cam">
+            CAM ({pendingCAM.length})
+          </TabsTrigger>
           <TabsTrigger value="corrections">
             Corrections ({correctionRequests.length})
           </TabsTrigger>
@@ -781,6 +855,70 @@ export default function Approvals() {
             Historical Data
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="cam" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending CAM Approvals</CardTitle>
+              <CardDescription>Review and approve CAM data submissions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingCAM.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No pending CAM approvals
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingCAM.map((cam) => (
+                    <div
+                      key={cam.id}
+                      className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors gap-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">Tower {cam.tower}</span>
+                          <Badge variant="outline">
+                            {cam.month ? getMonthName(cam.month) : `Q${cam.quarter}`} {cam.year}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Submitted by {cam.profiles?.full_name || 'Unknown'} • {new Date(cam.submitted_at || '').toLocaleDateString()}
+                        </div>
+                        <div className="text-sm grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                          <span>Paid Flats: <span className="font-medium">{cam.paid_flats}</span></span>
+                          <span>Pending Flats: <span className="font-medium">{cam.pending_flats}</span></span>
+                          <span>Total Flats: <span className="font-medium">{cam.total_flats}</span></span>
+                          <span>Advance: <span className="font-medium">{cam.advance_payments}</span></span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 sm:flex-none text-destructive hover:text-destructive"
+                          onClick={() => handleRejectCAM(cam.id)}
+                          disabled={processing}
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700"
+                          onClick={() => handleApproveCAM(cam.id)}
+                          disabled={processing}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="expenses" className="mt-6">
           <Card>
