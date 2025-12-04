@@ -22,17 +22,15 @@ export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) 
   // Sort by utilization descending
   const sortedData = [...data].sort((a, b) => b.utilization - a.utilization);
 
-  // Find max value for scaling
-  const maxValue = Math.max(...data.map(d => Math.max(d.actual, d.budget)));
-
   return (
     <Card className="p-4">
       <h3 className="text-sm font-medium mb-4 text-foreground">Category Achievement</h3>
       <div className="space-y-3">
         {sortedData.map((item) => {
-          const actualWidth = maxValue > 0 ? (item.actual / maxValue) * 100 : 0;
-          const budgetWidth = maxValue > 0 ? (item.budget / maxValue) * 100 : 0;
+          // Calculate actual as percentage of budget (capped at 100% for display)
+          const actualPercentage = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
           const isAchieved = item.utilization >= 100;
+          const isOverAchieved = item.utilization > 100;
 
           return (
             <div key={item.category} className="space-y-1">
@@ -40,21 +38,21 @@ export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) 
                 <span className="text-foreground font-medium truncate max-w-[140px]" title={item.category}>
                   {item.category}
                 </span>
-                <span className={`font-medium ${isAchieved ? 'text-primary' : 'text-amber-600'}`}>
+                <span className={`font-medium ${isAchieved ? 'text-green-600' : 'text-amber-600'}`}>
                   {item.utilization.toFixed(0)}%
                 </span>
               </div>
               <div className="relative h-5 bg-muted/30 rounded overflow-hidden">
-                {/* Budget bar (background) */}
+                {/* Budget bar (background - always 100% width) */}
                 <div
                   className="absolute top-0 left-0 h-full bg-muted/50 rounded"
-                  style={{ width: `${budgetWidth}%` }}
+                  style={{ width: '100%' }}
                 />
-                {/* Actual bar (foreground) */}
+                {/* Actual bar (foreground - percentage of budget) */}
                 <div
-                  className={`absolute top-0 left-0 h-full rounded transition-all ${isAchieved ? 'bg-primary/80' : 'bg-primary/60'
+                  className={`absolute top-0 left-0 h-full rounded transition-all ${isOverAchieved ? 'bg-green-600/80' : isAchieved ? 'bg-primary/80' : 'bg-primary/60'
                     }`}
-                  style={{ width: `${actualWidth}%` }}
+                  style={{ width: `${actualPercentage}%` }}
                 />
                 {/* Values */}
                 <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]">
