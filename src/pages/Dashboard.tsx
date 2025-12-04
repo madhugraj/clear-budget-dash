@@ -10,12 +10,14 @@ import { MonthlyExpenseChart } from '@/components/MonthlyExpenseChart';
 import { ItemWiseExpenseChart } from '@/components/ItemWiseExpenseChart';
 import { MonthlyIncomeChart } from '@/components/MonthlyIncomeChart';
 import { CategoryWiseIncomeChart } from '@/components/CategoryWiseIncomeChart';
+import { MonthlyCAMChart } from '@/components/MonthlyCAMChart';
 import { ItemAnalysisCard } from '@/components/ItemAnalysisCard';
 import { BudgetMeter } from '@/components/BudgetMeter';
 import { OverBudgetAlert } from '@/components/OverBudgetAlert';
 import { RoleBadge } from '@/components/RoleBadge';
 import { RefreshCw } from 'lucide-react';
 import { PettyCashAnalytics } from '@/components/PettyCashAnalytics';
+
 interface DashboardStats {
   totalBudget: number;
   totalExpenses: number;
@@ -56,6 +58,14 @@ interface PettyCashItemData {
   count: number;
   total_amount: number;
 }
+interface MonthlyCAMData {
+  month: string;
+  projected: number;
+  actual: number;
+}
+
+const CAM_RATE_PER_FLAT = 3500;
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
@@ -67,6 +77,7 @@ export default function Dashboard() {
   const [categoryIncomeData, setCategoryIncomeData] = useState<CategoryIncomeData[]>([]);
   const [monthlyPettyCashData, setMonthlyPettyCashData] = useState<MonthlyPettyCashData[]>([]);
   const [pettyCashItemData, setPettyCashItemData] = useState<PettyCashItemData[]>([]);
+  const [monthlyCAMData, setMonthlyCAMData] = useState<MonthlyCAMData[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartKey, setChartKey] = useState(0);
   const {
@@ -137,10 +148,62 @@ export default function Dashboard() {
     }
   };
 
+  const loadCAMData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cam_tracking')
+        .select('month, paid_flats, total_flats')
+        .eq('year', 2025); // Assuming current year for now
+
+      if (error) throw error;
+
+      const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+      const monthlyStats: Record<number, { projected: number; actual: number }> = {};
+
+      // Initialize all months
+      months.forEach((_, index) => {
+        // Map index 0-11 to month numbers: Apr(4) to Mar(3 next year)
+        // 0->4, 1->5... 8->12, 9->1, 10->2, 11->3
+        const monthNum = index < 9 ? index + 4 : index - 8;
+        monthlyStats[monthNum] = { projected: 0, actual: 0 };
+      });
+
+      data?.forEach(item => {
+        if (item.month) {
+          if (!monthlyStats[item.month]) {
+            monthlyStats[item.month] = { projected: 0, actual: 0 };
+          }
+          monthlyStats[item.month].projected += (item.total_flats * CAM_RATE_PER_FLAT);
+          monthlyStats[item.month].actual += (item.paid_flats * CAM_RATE_PER_FLAT);
+        }
+      });
+
+      const chartData = months.map((month, index) => {
+        const monthNum = index < 9 ? index + 4 : index - 8;
+        return {
+          month,
+          projected: monthlyStats[monthNum]?.projected || 0,
+          actual: monthlyStats[monthNum]?.actual || 0
+        };
+      });
+
+      setMonthlyCAMData(chartData);
+
+    } catch (error: any) {
+      console.error('Error loading CAM data:', error);
+      toast({
+        title: 'Error loading CAM data',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
   useEffect(() => {
     loadDashboardData();
     loadIncomeData();
     loadPettyCashData();
+    loadCAMData();
   }, []);
   const refreshCharts = () => {
     setChartKey(prev => prev + 1);
@@ -148,6 +211,7 @@ export default function Dashboard() {
     loadDashboardData();
     loadIncomeData();
     loadPettyCashData();
+    loadCAMData();
   };
   const loadDashboardData = async () => {
     try {
@@ -554,9 +618,10 @@ export default function Dashboard() {
       </div>
 
       <Tabs defaultValue="expense" className="w-full">
-        <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-6">
+        <TabsList className="grid w-full max-w-md mx-auto grid-cols-4 mb-6">
           <TabsTrigger value="expense">Expense</TabsTrigger>
           <TabsTrigger value="income">Income</TabsTrigger>
+          <TabsTrigger value="cam">CAM</TabsTrigger>
           <TabsTrigger value="petty-cash">Petty Cash</TabsTrigger>
         </TabsList>
 
@@ -611,6 +676,16 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="cam" className="space-y-6 mt-6">
+          <div className="w-full overflow-hidden">
+            <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-card via-card to-purple-50">
+              <CardContent className="p-6">
+                <MonthlyCAMChart data={monthlyCAMData} />
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
