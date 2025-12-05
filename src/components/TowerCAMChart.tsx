@@ -12,13 +12,13 @@ interface TowerCAMChartProps {
 }
 
 export function TowerCAMChart({ data }: TowerCAMChartProps) {
-    // Color based on payment rate
+    // Color based on payment rate - using theme-compatible colors
     const getColor = (rate: string | number) => {
         const numRate = typeof rate === 'string' ? parseFloat(rate) : rate;
-        if (numRate >= 90) return '#10b981'; // Green - excellent
-        if (numRate >= 75) return '#3b82f6'; // Blue - good
-        if (numRate >= 50) return '#f59e0b'; // Orange - moderate
-        return '#ef4444'; // Red - poor
+        if (numRate >= 90) return 'hsl(var(--primary))'; // Primary - excellent
+        if (numRate >= 75) return 'hsl(var(--primary) / 0.7)'; // Primary light - good
+        if (numRate >= 50) return 'hsl(var(--chart-4))'; // Chart color - moderate
+        return 'hsl(var(--destructive))'; // Destructive - poor
     };
 
     return (
@@ -48,11 +48,11 @@ export function TowerCAMChart({ data }: TowerCAMChartProps) {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload;
                                     return (
-                                        <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
+                                        <div className="bg-popover p-4 border border-border rounded-lg shadow-lg">
                                             <p className="font-bold text-lg mb-2">Tower {data.tower}</p>
-                                            <p className="text-green-600">Paid: {data.paid_flats} flats</p>
-                                            <p className="text-orange-600">Pending: {data.pending_flats} flats</p>
-                                            <p className="text-gray-600">Total: {data.total_flats} flats</p>
+                                            <p className="text-primary">Paid: {data.paid_flats} flats</p>
+                                            <p className="text-amber-600">Pending: {data.pending_flats} flats</p>
+                                            <p className="text-muted-foreground">Total: {data.total_flats} flats</p>
                                             <p className="font-semibold mt-2">Payment Rate: {data.payment_rate}%</p>
                                         </div>
                                     );

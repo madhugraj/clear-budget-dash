@@ -38,7 +38,7 @@ export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) 
                 <span className="text-foreground font-medium truncate max-w-[140px]" title={item.category}>
                   {item.category}
                 </span>
-                <span className={`font-medium ${isAchieved ? 'text-green-600' : 'text-amber-600'}`}>
+                <span className={`font-medium ${isAchieved ? 'text-primary' : 'text-amber-600'}`}>
                   {item.utilization.toFixed(0)}%
                 </span>
               </div>
@@ -50,7 +50,7 @@ export const CategoryWiseIncomeChart = ({ data }: CategoryWiseIncomeChartProps) 
                 />
                 {/* Actual bar (foreground - percentage of budget) */}
                 <div
-                  className={`absolute top-0 left-0 h-full rounded transition-all ${isOverAchieved ? 'bg-green-600/80' : isAchieved ? 'bg-primary/80' : 'bg-primary/60'
+                  className={`absolute top-0 left-0 h-full rounded transition-all ${isOverAchieved ? 'bg-primary' : isAchieved ? 'bg-primary/80' : 'bg-primary/60'
                     }`}
                   style={{ width: `${actualPercentage}%` }}
                 />

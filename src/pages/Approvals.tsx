@@ -829,7 +829,7 @@ export default function Approvals() {
                         </Button>
                         <Button
                           size="sm"
-                          className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700"
+                          className="flex-1 sm:flex-none"
                           onClick={() => handleApproveCAM(cam.id)}
                           disabled={processing}
                         >
