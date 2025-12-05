@@ -325,15 +325,29 @@ export default function CAMTracking() {
     try {
       const { calendarYear } = getCalendarYearAndMonths();
 
+      console.log('=== SUBMITTING CAM FOR APPROVAL ===');
+      console.log('Tower:', tower);
+      console.log('Year:', calendarYear);
+      console.log('Months:', months);
+
       // Update status to 'submitted' for all months of this tower
       const { error } = await supabase
         .from('cam_tracking')
         .update({
           status: 'submitted',
-          submitted_at: new Date().toISOString()
+          submitted_at: new Date().toISOString(),
+          uploaded_by: user.id
         } as any)
         .eq('tower', tower)
-      if (error) throw error;
+        .eq('year', calendarYear)
+        .in('month', months);
+
+      if (error) {
+        console.error('CAM Submission Error:', error);
+        throw error;
+      }
+
+      console.log('CAM submission update successful');
 
       // Send notification to treasurers (asynchronously, don't block on it)
       // Get the IDs of records that were just submitted
@@ -345,6 +359,8 @@ export default function CAMTracking() {
         .in('month', months)
         .eq('status', 'submitted');
 
+      console.log('Submitted Records:', submittedRecords);
+
       // Send notifications for each record
       if (submittedRecords && submittedRecords.length > 0) {
         for (const record of submittedRecords) {
@@ -353,6 +369,8 @@ export default function CAMTracking() {
           }).catch(err => console.error('Notification failed:', err));
         }
       }
+
+      console.log('=== END CAM SUBMISSION ===');
 
       toast.success(`Tower ${tower} data submitted for approval`);
       fetchCAMData();
