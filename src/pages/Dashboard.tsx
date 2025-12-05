@@ -175,10 +175,16 @@ export default function Dashboard() {
 
   const loadCAMData = async () => {
     try {
+      // Get current fiscal year - if month >= 4 (April), use current year, else use previous year
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const fiscalYearStart = currentMonth >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+
       const { data, error } = await supabase
         .from('cam_tracking')
         .select('tower, month, paid_flats, pending_flats, total_flats, year, status')
-        .eq('status', 'approved'); // Only show approved CAM data
+        .eq('status', 'approved')
+        .eq('year', fiscalYearStart); // Filter by fiscal year
 
       if (error) throw error;
 
