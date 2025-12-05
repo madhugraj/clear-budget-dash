@@ -21,6 +21,7 @@ import PettyCash from "./pages/PettyCash";
 import CAMTracking from "./pages/CAMTracking";
 import MissingDataReport from "./pages/MissingDataReport";
 import SportsIncome from "./pages/SportsIncome";
+import CAMReports from "./pages/CAMReports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -176,6 +177,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <SportsIncome />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cam-reports"
+              element={
+                <ProtectedRoute requiredRole="treasurer">
+                  <AppLayout>
+                    <CAMReports />
                   </AppLayout>
                 </ProtectedRoute>
               }

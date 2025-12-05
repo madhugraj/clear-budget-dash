@@ -42,6 +42,7 @@ const navigation = [
   { name: 'Missing Data Report', href: '/missing-data-report', icon: AlertCircle, roles: ['treasurer'] },
   { name: 'Petty Cash', href: '/petty-cash', icon: Receipt, roles: ['treasurer', 'lead', 'accountant'] },
   { name: 'CAM Tracking', href: '/cam-tracking', icon: Building2, roles: ['treasurer', 'lead'] },
+  { name: 'CAM Reports', href: '/cam-reports', icon: FileBarChart, roles: ['treasurer'] },
   { name: 'Historical Data', href: '/historical', icon: History, roles: ['treasurer', 'accountant'] },
 ];
 
