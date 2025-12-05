@@ -153,7 +153,7 @@ export default function Corrections() {
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean;
     id: string;
-    type: 'expense' | 'income' | 'petty_cash';
+    type: 'expense' | 'income' | 'petty_cash' | 'cam';
     description: string;
   }>({ isOpen: false, id: '', type: 'expense', description: '' });
   const [deleting, setDeleting] = useState(false);
@@ -1459,7 +1459,10 @@ export default function Corrections() {
                                     onClick={() => {
                                       // Navigate to CAM Tracking page with this record
                                       navigate('/cam-tracking');
-                                      toast.info('Please edit CAM data in the CAM Tracking page');
+                                      toast({
+                                        title: 'CAM Editing',
+                                        description: 'Please edit CAM data in the CAM Tracking page',
+                                      });
                                     }}
                                   >
                                     <Edit className="h-4 w-4 mr-1" />
