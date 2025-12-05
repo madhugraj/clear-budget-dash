@@ -17,6 +17,7 @@ import {
   Edit3,
   Building2,
   AlertCircle,
+  Trophy,
 } from 'lucide-react';
 import {
   Sheet,
@@ -28,11 +29,12 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { AutoLogout } from '@/components/AutoLogout';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['treasurer', 'accountant', 'general', 'lead'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['treasurer', 'accountant', 'general', 'lead', 'office_assistant'] },
   { name: 'Upload Budget - Expense', href: '/budget-upload', icon: Upload, roles: ['treasurer'] },
   { name: 'Budget Upload - Income', href: '/income-budget-upload', icon: Upload, roles: ['treasurer'] },
   { name: 'Add Income', href: '/add-income', icon: Plus, roles: ['accountant', 'treasurer'] },
   { name: 'Add Expense', href: '/expenses', icon: Receipt, roles: ['accountant', 'treasurer'] },
+  { name: 'Sports Income', href: '/sports-income', icon: Trophy, roles: ['office_assistant', 'treasurer'] },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle, roles: ['treasurer'] },
   { name: 'Corrections', href: '/corrections', icon: Edit3, roles: ['accountant', 'treasurer'] },
   { name: 'User Management', href: '/user-management', icon: UserCog, roles: ['treasurer'] },
